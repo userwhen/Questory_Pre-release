@@ -163,11 +163,14 @@ function RewardRevealModal({ summary, onClose }) {
           <div style={{ animation: 'fadeIn 0.4s' }}>
             <div style={{ fontWeight: 800, marginBottom: 8 }}>總共完成了 {summary.summary.count} 項相關任務</div>
             <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 10 }}>
-              {Object.entries(summary.summary.byCat).map(([cat, n]) => `${cat} x${n}`).join(' ')}
+              {Object.entries(summary.summary.byCat).map(([cat, n]) => `${cat} x${n}`).join('　')}
             </div>
             <div style={{ fontWeight: 700, color: 'var(--color-gold-dark)', fontSize: '1.1rem' }}>
               💰+{summary.reward.gold} ✨+{summary.reward.exp}
             </div>
+            {summary.rewardCoupons > 0 && (
+              <div style={{ fontSize: '0.9rem', color: 'var(--text-2)', marginTop: 4 }}>🎫 金幣券 x{summary.rewardCoupons}</div>
+            )}
           </div>
         )}
       </div>
@@ -299,6 +302,17 @@ function MilestoneFormModal({ initial, taskCats, skills, shopItems = [], allTask
           <div style={{ ...boxStyle, marginTop: 10 }}>
             <label style={labelStyle}>🎁 指定獎勵道具（選填，鑽石類商品不開放）</label>
             <RewardItemPicker items={shopItems.filter(i => i.currency !== 'gem')} value={form.rewardItemId || ''} onChange={v => set('rewardItemId', v || null)} />
+          </div>
+
+          <div style={{ ...boxStyle, marginTop: 10 }}>
+            <label style={labelStyle}>🎫 附加金幣券（選填）</label>
+            <div style={{ display: 'flex', gap: 5 }}>
+              {[0, 1, 3, 5].map(n => (
+                <button key={n} type="button"
+                  style={{ ...tierBtnStyle, flex: 1, background: (form.rewardCoupons || 0) === n ? 'var(--color-correct,#227A59)' : 'var(--bg-card,#fff)', color: (form.rewardCoupons || 0) === n ? '#fff' : 'var(--text,#2c1a0e)', border: `1.5px solid ${(form.rewardCoupons || 0) === n ? 'var(--color-correct,#227A59)' : 'var(--border-input,#d5c5a8)'}` }}
+                  onClick={() => set('rewardCoupons', n)}>{n === 0 ? '不給' : `${n}張`}</button>
+              ))}
+            </div>
           </div>
         </>
       ) : (
@@ -445,8 +459,6 @@ export default function AchPage({ onRegisterBack } = {}) {
   const [editingAch, setEditingAch] = useState(null);
   const [containerSummary, setContainerSummary] = useState(null);
 
-  // ── 返回攔截登記：榮譽殿堂開著時，返回鍵/手勢先關殿堂，
-  //    不會直接連著外層 TaskPage 一起跳出去
   useEffect(() => {
     if (!onRegisterBack) return;
     if (showHall) {
@@ -504,7 +516,7 @@ export default function AchPage({ onRegisterBack } = {}) {
     if (form.isSystem && form.editable) {
       EventBus.emit(Events.Ach.REQUEST_UPDATE_TEXT, { id: form.id, title: form.title, desc: form.desc });
     } else if (form.targetType === 'manual_group') {
-      EventBus.emit(Events.Ach.REQUEST_UPDATE_CONTAINER, { id: form.id, title: form.title, desc: form.desc, rewardItemId: form.rewardItemId || null });
+      EventBus.emit(Events.Ach.REQUEST_UPDATE_CONTAINER, { id: form.id, title: form.title, desc: form.desc, rewardItemId: form.rewardItemId || null, rewardCoupons: form.rewardCoupons || 0 });
     } else if (form.id) {
       EventBus.emit(Events.Ach.REQUEST_UPDATE_MILESTONE, form);
     } else {

@@ -37,7 +37,7 @@ export const Notification = {
         if (!task) return;
 
         if (action.actionId === 'complete' && !task.done) {
-          import('@/engines/task.js').then(({ TaskEngine }) => TaskEngine.resolveTask(taskId));
+          import('@/task/engines/task.js').then(({ TaskEngine }) => TaskEngine.resolveTask(taskId));
           EventBus.emit(Events.System.TOAST, '✅ 任務已從通知列完成！');
         } else if (action.actionId === 'snooze') {
           const newTime = new Date(Date.now() + 3600000);

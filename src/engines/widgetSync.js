@@ -2,10 +2,10 @@
 import { getState } from '@/core/state.js';
 import { EventBus, makeIdempotentInit } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
-import { sortTasks } from '@/utils/taskSort.js';
+import { sortTasks } from '@/task/utils/taskSort.js';
 import { WidgetBridge } from '@/plugins/widgetBridge.js';
 
-const MAX_WIDGET_TASKS = 5;
+const MAX_WIDGET_TASKS = 15; // 小工具實際顯示 5 筆，其餘作為「重新整理」時的候補池
 
 export const WidgetSyncEngine = {
   init: makeIdempotentInit(function () {

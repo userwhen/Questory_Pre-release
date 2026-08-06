@@ -145,6 +145,7 @@ export const useGameStore = create(
             lastEnergyTick: s.lastEnergyTick ?? Date.now(),
             taskCats: s.taskCats ?? [...BASE_TASK_CATS],
             customTaskCatNames: s.customTaskCatNames ?? [],
+            rewardCoupons: s.rewardCoupons ?? 0,
           };
         });
       },
@@ -245,6 +246,17 @@ export const useGameStore = create(
           } : {}),
         }));
         return { success: true };
+      },
+      addRewardCoupon(amount = 1) {
+        if (amount <= 0) return;
+        set(s => ({ rewardCoupons: (s.rewardCoupons || 0) + amount }));
+      },
+
+      spendRewardCoupon(amount = 1) {
+        const s = get();
+        if ((s.rewardCoupons || 0) < amount) return false;
+        set(s => ({ rewardCoupons: s.rewardCoupons - amount }));
+        return true;
       },
 
       // ─── 資源方法（未變動）───────────────────────────────

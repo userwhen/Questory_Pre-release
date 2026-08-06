@@ -110,6 +110,12 @@ export const Events = {
     NARRATIVE_END: 'story:narrative_end',
     NARRATIVE_INTERRUPT: 'story:narrative_interrupt',
   },
+  Reward: {
+    // task.js 完成任務時發出：requestId + importance/urgency/comboMultiplier/enchantMultiplier
+    REQUEST_ROLL: 'reward:request_roll',
+    // RewardEngine 骰完後回傳：requestId + gold/exp/coupon
+    ROLL_RESULT: 'reward:roll_result',
+  },
   Ach: {
     UPDATED: 'ach:updated',
     UNLOCKED: 'ach:unlocked',
@@ -131,7 +137,7 @@ export const Events = {
     REQUEST_ADD_MEMBER: 'ach:request_add_member',             // payload: { achievementId, taskId } — 新增任務時勾選「加入既有成就」
     REQUEST_REMOVE_MEMBER: 'ach:request_remove_member', // payload: { achievementId, taskId } — 編輯任務時解除成就歸屬用
     REQUEST_UPDATE_TEXT: 'ach:request_update_text',           // payload: { id, title, desc } — 系統可編輯成就（分類/技能）改文字用
-    REQUEST_UPDATE_CONTAINER: 'ach:request_update_container', // payload: { id, title, desc, rewardItemId }
+    REQUEST_UPDATE_CONTAINER: 'ach:request_update_container', // payload: { id, title, desc, rewardItemId, rewardCoupons }
   },
   Settings: {
     UPDATED: 'settings:updated',
@@ -149,10 +155,13 @@ export const Events = {
     REQUEST_PERFORM_RESET: 'settings:request_perform_reset',
     // ── 測試用假訂閱開關（TODO：串接真正 IAP 後，應改由付款成功的 callback 觸發，不能再讓 UI 直接呼叫）──
     REQUEST_TOGGLE_MOCK_SUB: 'settings:request_toggle_mock_sub',
+    // ── 鎖定功能列的 Pro 按鈕（目前先跳 Toast；之後想做「Pro 介紹頁」時，見②，暫緩）──
+    REQUEST_SHOW_PRO_UPSELL: 'settings:request_show_pro_upsell', // payload: { label }
+    // ── 訂閱到期/取消，通知 UI 哪些沒买断的功能被一併鎖住了（payload: { features: string[] }）──
+    SUBSCRIPTION_FEATURES_LOST: 'settings:subscription_features_lost',
   },
   Avatar: {
     UPDATED: 'avatar:updated',
-    PET_REPLACE_PROMPT: 'avatar:pet_replace_prompt',   // payload: { newItemId }
 
     // ── 抽卡（模式 B，含隨機性，需要 requestId 搭配 EventHelper）──
     REQUEST_GACHA: 'avatar:request_gacha',       // payload: { times, requestId }
@@ -164,7 +173,6 @@ export const Events = {
     REQUEST_PREVIEW_ITEM: 'avatar:request_preview_item',           // payload: { itemId }
     REQUEST_CLEAR_PREVIEW: 'avatar:request_clear_preview',
     REQUEST_WEAR_ITEM: 'avatar:request_wear_item',                 // payload: { id, type }
-    REQUEST_CONFIRM_PET_REPLACE: 'avatar:request_confirm_pet_replace', // payload: { index, newItemId }
     // ── 購買（模式 B：需要立即知道成功與否、扣款結果）──
     REQUEST_BUY_ITEM: 'avatar:request_buy_item',   // payload: { id, requestId }
     BUY_ITEM_RESULT: 'avatar:buy_item_result',     // payload: { success, msg, requestId }
@@ -182,6 +190,13 @@ export const Events = {
     REQUEST_DISMISS_EXPLORE: 'pet:request_dismiss_explore', // payload: { index }（玩家婉拒探險邀約）
     REQUEST_NAME_PET: 'pet:request_name_pet', // payload: { index, name }（幫剛從購買/裝備門進來、needsNaming 為 true 的寵物確認名字）
     PET_ADDED_NEEDS_NAMING: 'pet:added_needs_naming', // payload: { index }（新寵物剛加入 activePets 那一刻立即發出，讓當下掛載的頁面直接跳出取名視窗，不用等玩家切回大廳）
+    // ── 從 Avatar 搬過來（購買/裝備門的寵物邏輯已搬進 PetEngine）──
+    REQUEST_WEAR_ITEM: 'pet:request_wear_item', // payload: { itemId }（avatar.js 的 wearItem() 選到 pet 分類時轉發過來）
+    REPLACE_PROMPT: 'pet:replace_prompt', // payload: { newItemId }（原 Avatar.PET_REPLACE_PROMPT）
+    REQUEST_CONFIRM_REPLACE: 'pet:request_confirm_replace', // payload: { index, newItemId }（原 Avatar.REQUEST_CONFIRM_PET_REPLACE）
+    // ── 關閉寵物系統：清空當前寵物（不影響 petArchive/traveledPets/retiredPetHistory）──
+    REQUEST_DISABLE_MODULE: 'pet:request_disable_module', // Settings 頁手動關閉，UI 端已跳過 ConfirmDialog 確認
+    REQUEST_WIPE_CURRENT: 'pet:request_wipe_current',      // 訂閱到期/取消、且沒买断時呼叫，只清資料不動 module_pet_active
   },
   Timer: {
     // 原本是裸字串 'TIMER_COMPLETED'（跟其他 category:action 命名風格不一致），

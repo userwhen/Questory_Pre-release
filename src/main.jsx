@@ -5,22 +5,23 @@ import { useGameStore, applyOfflineEnergyRecovery } from '@/core/state.js';
 import { EventBus } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
 import App from '@/App.jsx';
-import { StoryBridge } from '@/engines/story/StoryBridge.js';
+import { StoryBridge } from '@/story/engines/StoryBridge.js';
 import { StatsEngine } from '@/engines/stats.js';
 import { AchEngine } from '@/engines/ach.js';
 import { ShopEngine } from '@/engines/shop.js';
 import { CheckinEngine } from '@/engines/checkin.js';
-import { TaskEngine } from '@/engines/task.js';
+import { TaskEngine } from '@/task/engines/task.js';
 import { WidgetSyncEngine } from '@/engines/widgetSync.js';
 import { Audio } from '@/plugins/audio.js';
 import { Notification } from '@/plugins/notification.js';
 import { ChallengeEngine } from '@/engines/challenge.js';
-import { PetEngine } from '@/engines/pet.js';
-import { AvatarEngine } from '@/engines/avatar.js';
+import { RewardEngine } from '@/engines/reward.js';
+import { PetEngine } from '@/pet/engines/pet.js';
+import { AvatarEngine } from '@/avatar/engines/avatar.js';
 import { SettingsEngine } from '@/engines/settings.js';
-import { narrativeEngine } from '@/engines/story/NarrativeEngine.js';
-import { ConvertedPool } from '@/data/story/converted_pool.js';
-import { PluginConfigs } from '@/data/story/plugin_configs.js';
+import { narrativeEngine } from '@/story/engines/NarrativeEngine.js';
+import { ConvertedPool } from '@/story/data/converted_pool.js';
+import { PluginConfigs } from '@/story/data/plugin_configs.js';
 
 // 初始化 iOS 滑動返回插件
 IosSwipeBackPlugin.enable();
@@ -51,6 +52,7 @@ function Root() {
     Audio.init();
     Notification.init();
     ChallengeEngine.init();
+    RewardEngine.init();
     PetEngine.init();
     AvatarEngine.init();
     SettingsEngine.init();

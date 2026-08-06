@@ -1,6 +1,6 @@
 // src/components/ui/CharacterSprite.jsx
 import React from 'react';
-import { ALL_ITEMS } from '@/data/avatar_config.js';
+import { ALL_ITEMS } from '@/avatar/data/avatar_config.js';
 
 // 依 id 查找裝備設定（取得 imgId / layers 等資訊）
 function findItem(itemId) {

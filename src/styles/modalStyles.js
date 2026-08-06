@@ -92,3 +92,13 @@ export const btnDangerStyle = {
   ...btnStyle,
   background: 'var(--color-danger, #c0392b)',
 };
+
+// ── 從 PetWidget.jsx 拆分時搬過來的共用樣式（原本是寵物元件本地定義，
+//    因為多處共用而收斂到這裡）。標記起來方便追蹤：如果未來寵物系統的
+//    標籤或彈窗樣式需求跟其他地方分岔，可以再拉回寵物專屬的檔案自己維護。
+export const compactModalStyle = { ...modalStyle, maxWidth: 380 };
+
+export const statusTagStyle = (bg, color = '#fff') => ({
+  fontSize: '0.65rem', padding: '1px 6px', borderRadius: 8,
+  background: bg, color, fontWeight: 600,
+});

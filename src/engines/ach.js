@@ -14,27 +14,19 @@ export const AchEngine = {
     const unsubTag = EventBus.on(Events.Ach.GENERATE_FOR_TAG, ({ cat }) => {
       this.generateDynamicAchievementsForTag(cat);
     });
-    // 監聽任務完成事件，更新成就進度
     const unsubTaskDone = EventBus.on(Events.Task.COMPLETED, ({ task, impact }) => {
       this.onTaskCompleted(task, impact);
     });
-    // 監聽任務撤銷事件
     const unsubTaskUndone = EventBus.on(Events.Task.UNCOMPLETED, ({ task, impact }) => {
       this.onTaskUndone(task, impact);
     });
-    // 監聽計時完成事件（專注時間 / 番茄鐘成就）
     const unsubTimer = EventBus.on(Events.Timer.COMPLETED, ({ mode, minutes }) => {
       this.onTimerCompleted(mode, minutes);
     });
 
-    // AchPage.jsx 透過這些事件呼叫，不再直接 import AchEngine
     const unsubClaim = EventBus.on(Events.Ach.REQUEST_CLAIM_REWARD, ({ id, requestId }) => {
       const result = this.claimReward(id);
       EventBus.emit(Events.Ach.CLAIM_REWARD_RESULT, { ...result, requestId });
-    });
-    const unsubCheckIn = EventBus.on(Events.Ach.REQUEST_CHECK_IN, ({ id, requestId }) => {
-      const result = this.checkInAch(id);
-      EventBus.emit(Events.Ach.CHECK_IN_RESULT, { ...result, requestId });
     });
     const unsubCreateMs = EventBus.on(Events.Ach.REQUEST_CREATE_MILESTONE, (data) => {
       this.createMilestone(data);
@@ -68,30 +60,28 @@ export const AchEngine = {
     const unsubUpdateText = EventBus.on(Events.Ach.REQUEST_UPDATE_TEXT, ({ id, title, desc }) => {
       this.updateAchievementText(id, title, desc);
     });
-    const unsubUpdateContainer = EventBus.on(Events.Ach.REQUEST_UPDATE_CONTAINER, ({ id, title, desc, rewardItemId }) => {
-      this.updateContainerMeta(id, { title, desc, rewardItemId });
+    const unsubUpdateContainer = EventBus.on(Events.Ach.REQUEST_UPDATE_CONTAINER, ({ id, title, desc, rewardItemId, rewardCoupons }) => {
+      this.updateContainerMeta(id, { title, desc, rewardItemId, rewardCoupons });
     });
 
     return [unsubTag, unsubTaskDone, unsubTaskUndone, unsubTimer,
-      unsubClaim, unsubCheckIn, unsubCreateMs, unsubUpdateMs, unsubDeleteMs,
-      unsubSkillMaxed, unsubAttrLevelUp, unsubCreateContainer, unsubAddMember,
-      unsubRemoveMember, unsubCompleteContainer, unsubUpdateText, unsubUpdateContainer];
+      unsubClaim, unsubCreateMs, unsubUpdateMs, unsubDeleteMs,
+      unsubSkillMaxed, unsubAttrLevelUp, unsubCreateContainer, unsubAddMember, unsubRemoveMember,
+      unsubCompleteContainer, unsubUpdateText, unsubUpdateContainer];
   }),
 
   seedSystemAchievements() {
-  const s = getState();
+    const s = getState();
 
-  // 一次性清理：每日簽到/冒險啟程已移除（登入邏輯移到別處了），把先前可能已種下的舊資料一併濾掉
-  const obsoleteIds = new Set(['sys_daily_checkin', 'sys_login_days_c', 'sys_login_days_b', 'sys_login_days_a', 'sys_login_days_s']);
-  const existing = (s.achievements || []).filter(a => !obsoleteIds.has(a.id));
-  if (existing.length !== (s.achievements || []).length) {
-    setState({ achievements: existing });
-  }
+    const obsoleteIds = new Set(['sys_daily_checkin', 'sys_login_days_c', 'sys_login_days_b', 'sys_login_days_a', 'sys_login_days_s']);
+    const existing = (s.achievements || []).filter(a => !obsoleteIds.has(a.id));
+    if (existing.length !== (s.achievements || []).length) {
+      setState({ achievements: existing });
+    }
 
-  const existingIds = new Set(existing.map(a => a.id));
-  const toAdd = [];
+    const existingIds = new Set(existing.map(a => a.id));
+    const toAdd = [];
 
-    // 官方精選：鎖定分類（日常/運動），手刻文案，不可編輯
     const curatedTagAchievements = [
       { id: 'sys_curated_日常', title: '日常小尖兵', desc: '累積完成 100 件日常任務', tag: '日常', target: 100, reward: { gold: 100, exp: 200 } },
       { id: 'sys_curated_運動', title: '體能王',     desc: '累積完成 100 次運動任務', tag: '運動', target: 100, reward: { gold: 100, exp: 200 } },
@@ -107,7 +97,6 @@ export const AchEngine = {
       }
     });
 
-    // 官方精選：六大屬性專屬，達到等級即解鎖
     const attrsNow = s.attrs || {};
     Object.entries(attrsNow).forEach(([key, attr]) => {
       const id = `sys_curated_attr_${key}`;
@@ -127,66 +116,6 @@ export const AchEngine = {
         achievements: [...(state.achievements || []), ...toAdd],
       }));
     }
-
-    // 每天重置 sys_daily_checkin 的 claimed 狀態
-    this._resetDailyCheckinIfNeeded();
-  },
-
-  _resetDailyCheckinIfNeeded() {
-    const s = getState();
-    const today = new Date().toDateString();
-    const ach = (s.achievements || []).find(a => a.id === 'sys_daily_checkin');
-    if (!ach) return;
-    // 如果上次領取日期不是今天，重置 claimed
-    if (ach.claimed && ach.lastClaimedDate !== today) {
-      setState(state => ({
-        achievements: (state.achievements || []).map(a =>
-          a.id === 'sys_daily_checkin'
-            ? { ...a, claimed: false, done: false }
-            : a
-        ),
-      }));
-    }
-  },
-
-  checkInAch(id) {
-    if (id === 'sys_daily_checkin') {
-      const s = getState();
-      const today = new Date().toDateString();
-      const ach = (s.achievements || []).find(a => a.id === id);
-      if (!ach) return { success: false, msg: '找不到簽到成就' };
-      if (ach.claimed && ach.lastClaimedDate === today) return { success: false, msg: '今日已領取過了' };
-
-      const reward = ach.reward || { gold: 50, exp: 50 };
-
-      setState(state => {
-        const newAchs = (state.achievements || []).map(a =>
-          a.id === id ? { ...a, claimed: true, done: true, lastClaimedDate: today, finishDate: Date.now() } : a
-        );
-        return { gold: (state.gold || 0) + reward.gold, achievements: newAchs };
-      });
-
-      if (reward.exp) EventBus.emit(Events.Stats.ADD_PLAYER_EXP, { amount: reward.exp });
-
-      // 同步更新登入天數相關成就進度
-      this._updateLoginDaysProgress();
-
-      return { success: true, reward };
-    }
-    return this.claimReward(id);
-  },
-
-  _updateLoginDaysProgress() {
-    const s = getState();
-    const total = s.totalLoginDays || 0;
-    setState(state => ({
-      achievements: (state.achievements || []).map(a => {
-        if (a.targetType !== 'login_days' || a.id === 'sys_daily_checkin') return a;
-        const curr = total;
-        const done = curr >= a.target;
-        return { ...a, curr, done: done || a.done, finishDate: done && !a.done ? Date.now() : a.finishDate };
-      }),
-    }));
   },
 
   onTaskCompleted(task, impact) {
@@ -313,9 +242,7 @@ export const AchEngine = {
           tier: nextTier,
           target: newConfig.target,
           reward: newConfig.reward,
-          desc: ms.targetType === 'login_days'
-            ? `累積登入 ${newConfig.target} 天`
-            : `累積完成 ${newConfig.target} ${unit}`,
+          desc: `累積完成 ${newConfig.target} ${unit}`,
           curr: ms.curr,
           done: ms.curr >= newConfig.target,
           claimed: false,
@@ -394,7 +321,7 @@ export const AchEngine = {
     const newAch = {
       id: 'ach_container_' + Date.now(), title: title || '未命名成就', desc: '',
       type: 'container', targetType: 'manual_group', memberTaskIds: [taskId],
-      tier: null, curr: 0, target: null, reward: null,
+      tier: null, curr: 0, target: null, reward: null, rewardItemId: null, rewardCoupons: 0,
       done: false, claimed: false, isSystem: false, isUpgradeable: false, finishDate: null,
     };
     setState(s => ({ achievements: [...(s.achievements || []), newAch] }));
@@ -437,8 +364,12 @@ export const AchEngine = {
     }));
     if (reward.exp) EventBus.emit(Events.Stats.ADD_PLAYER_EXP, { amount: reward.exp });
     if (ach.rewardItemId) EventBus.emit(Events.Shop.REQUEST_GRANT_ITEM, { id: ach.rewardItemId, qty: 1 });
+    if (ach.rewardCoupons > 0) getState().addRewardCoupon(ach.rewardCoupons);
 
-    return { success: true, reward, rewardItemId: ach.rewardItemId, summary: { count: memberTasks.length, totalDifficulty, byCat } };
+    return {
+      success: true, reward, rewardItemId: ach.rewardItemId, rewardCoupons: ach.rewardCoupons || 0,
+      summary: { count: memberTasks.length, totalDifficulty, byCat },
+    };
   },
 
   updateAchievementText(id, title, desc) {

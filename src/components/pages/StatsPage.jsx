@@ -1,12 +1,34 @@
 /* src/components/pages/StatsPage.jsx */
-import React, { useState, useEffect, useRef } from 'react';
-import { useGameStore } from '@/core/state.js';
-import { EventBus } from '@/core/events.js';
+
+// 1. 第三方套件 (External Libraries)
+import { useEffect, useRef, useState } from 'react';
+import {
+  Chart,
+  Filler,
+  LineElement,
+  PointElement,
+  RadarController,
+  RadialLinearScale,
+  Tooltip
+} from 'chart.js';
+
+// 2. 核心機制與狀態 (Core & Hooks)
 import { Events } from '@/core/event_types.js';
+import { EventBus } from '@/core/events.js';
+import { useGameStore } from '@/core/state.js';
 import { useRequestAction } from '@/hooks/useRequestAction.js';
-import { Chart, RadarController, RadialLinearScale, PointElement, LineElement, Filler, Tooltip } from 'chart.js';
+
+// 3. UI 元件與樣式 (Components & Styles)
 import Modal from '@/components/ui/Modal.jsx';
-import { labelStyle, inputStyle, btnStyle } from '@/styles/modalStyles.js';
+import { btnStyle, inputStyle, labelStyle } from '@/styles/modalStyles.js';
+import { 
+  pageStyle, 
+  scrollAreaStyle, 
+  segBtnStyle, 
+  segmentWrapStyle 
+} from '@/task/components/TaskStyles.js'; // ⚠️ 已根據你的目錄結構修正路徑
+
+// Chart.js 註冊
 Chart.register(RadarController, RadialLinearScale, PointElement, LineElement, Filler, Tooltip);
 
 /* ─── 雷達圖 ─────────────────────────────────────────── */
@@ -132,13 +154,11 @@ function SkillModal({ initial, attrs, onClose }) {
 
 /* ─── 主頁面 ─────────────────────────────────────────── */
 export default function StatsPage() {
-  // 拆成各自獨立的 selector：只有該欄位真的變動時才會觸發重繪，
-  // 不會再被 attrs 以外的 store 更新拖著一起重建圖表
   const attrs          = useGameStore(s => s.attrs          || {});
   const skills         = useGameStore(s => s.skills         || []);
   const archivedSkills = useGameStore(s => s.archivedSkills || []);
   const lv             = useGameStore(s => s.lv             || 1);
-  const exp            = useGameStore(s => s.exp            || 0);
+  const exp            = useGameStore(s => s.exp             || 0);
 
   const [tab, setTab] = useState('attr');
   const [skillModal, setSkillModal] = useState(null); // null | { editId, name, parent, skill }
@@ -150,17 +170,19 @@ export default function StatsPage() {
 
   return (
     <div style={pageStyle}>
-      {/* ── 頂部雷達/熱量切換 ── */}
-      <div style={{ flexShrink: 0, padding: '10px 15px 0' }}>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          {[['attr', '● 能力分析'], ['cal', '● 熱量監控']].map(([val, label]) => (
-            <button key={val}
-              style={{ ...segBtnStyle, background: tab === val ? 'var(--color-correct, #227A59)' : 'var(--bg-box, rgba(0,0,0,0.035))', color: tab === val ? '#fff' : 'var(--text-muted, #8c6e52)' }}
-              onClick={() => setTab(val)}
-            >{label}</button>
-          ))}
-        </div>
+      {/* ── 分頁切換：跟 TaskPage 共用同一份樣式（segmentWrapStyle/segBtnStyle），
+             位置、間距、pill 尺寸完全一致，跟 task 來回切換不會跳動 ── */}
+      <div style={segmentWrapStyle}>
+        {[['attr', '● 能力分析'], ['cal', '● 熱量監控']].map(([val, label]) => (
+          <button key={val}
+            style={{ ...segBtnStyle, background: tab === val ? 'var(--color-correct, #227A59)' : 'transparent', color: tab === val ? '#fff' : 'var(--text-muted, #8c6e52)' }}
+            onClick={() => setTab(val)}
+          >{label}</button>
+        ))}
+      </div>
 
+      {/* ── 雷達圖/熱量卡 ── */}
+      <div style={{ flexShrink: 0, padding: '10px 15px' }}>
         {tab === 'attr' ? (
           <RadarChart attrs={attrs} />
         ) : (
@@ -278,7 +300,7 @@ function CalCard() {
     run(Events.Stats.REQUEST_POP_BALL, Events.Stats.POP_BALL_RESULT,
       { amount: ball.kcal },
       {
-        showFailToast: false, // popCalorieBall() 內部已經自己 toast「額度不足」
+        showFailToast: false,
         onSuccess: () => { setPopping(idx); setTimeout(() => setPopping(null), 300); },
       }
     );
@@ -390,10 +412,8 @@ function ProgressBar({ pct, text, color = 'var(--color-correct, #227A59)' }) {
   );
 }
 
-/* ─── 樣式 ──────────────────────────────────────────── */
-const pageStyle = { display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg-panel, #f7e7ce)' };
-const scrollAreaStyle = { flex: 1, overflowY: 'auto', padding: '10px 15px', overflowX: 'hidden' };
-const segBtnStyle = { flex: 1, border: 'none', borderRadius: 50, padding: '7px 0', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', transition: '0.2s', fontFamily: 'inherit' };
+/* ─── 樣式（Stats 專屬的部分維持在這裡；pageStyle/segmentWrapStyle/segBtnStyle/
+       scrollAreaStyle 已改成 import，不在這裡重複定義）──────────────── */
 const attrCardStyle = { background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, boxShadow: 'var(--shadow-xs, 0 1px 2px rgba(0,0,0,0.07))', border: '1px solid var(--border-card, rgba(0,0,0,0.07))', fontSize: '0.9rem', color: 'var(--text, #2c1a0e)' };
 const skillCardStyle = { display: 'flex', alignItems: 'center', background: 'var(--bg-card, #fff)', borderRadius: 12, padding: '12px 13px', marginBottom: 10, boxShadow: 'var(--shadow-sm, 0 2px 6px rgba(0,0,0,0.09))', border: '1px solid var(--border-card, rgba(0,0,0,0.07))', borderLeft: '4px solid var(--color-gold, #f5a623)', cursor: 'pointer' };
 const addBtnStyle = { padding: '5px 14px', borderRadius: 6, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: 'inherit', background: 'var(--bg-card, #fff)', border: '1.5px solid var(--border-input, #d5c5a8)', color: 'var(--text, #2c1a0e)' };

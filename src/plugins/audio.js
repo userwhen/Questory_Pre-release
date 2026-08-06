@@ -1,11 +1,61 @@
 import { useGameStore } from '@/core/state.js';
 
+// ── 自訂 BGM 持久化（IndexedDB）──────────────────────────
+// 舊版把 URL.createObjectURL() 的結果直接存進 zustand persist（等於存進 localStorage），
+// 但 blob URL 只在建立它的那個分頁存活，重新整理/重開 App 後就是死連結，
+// 玩家會看到「✅ 已上傳自訂音樂」卻放不出聲音。
+// 改法：實際檔案（File/Blob）存進 IndexedDB；zustand 裡的 settings.customBGM
+// 只存 'custom' 這個旗標字串（給 UI 判斷「有沒有上傳過」用），blob URL 每次用到才重建。
+const DB_NAME = 'questory_audio';
+const STORE_NAME = 'bgm';
+const BGM_KEY = 'custom_bgm';
+
+function openBgmDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(STORE_NAME); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSetBgm(blob) {
+  const db = await openBgmDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(blob, BGM_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGetBgm() {
+  const db = await openBgmDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).get(BGM_KEY);
+    req.onsuccess = () => resolve(req.result ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbClearBgm() {
+  const db = await openBgmDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(BGM_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export const Audio = {
-  _ctx:              null,
-  _masterGain:       null,
-  _musicGain:        null,
-  _bgmAudio:         null,
-  _isPausedBySystem: false,
+  _ctx:                null,
+  _masterGain:         null,
+  _musicGain:          null,
+  _bgmAudio:           null,
+  _isPausedBySystem:   false,
+  _bgmResumeAttempted: false, // 防止 init() 的 once 監聽器（click/touchend 各一個）重複觸發接續播放
 
   get _enabled()      { return useGameStore.getState().settings?.soundEnabled ?? true; },
   get _volume()       { return useGameStore.getState().settings?.volume       ?? 0.7; },
@@ -24,6 +74,11 @@ export const Audio = {
         this._musicGain.gain.value = this._musicVolume;
         this._musicGain.connect(this._ctx.destination);
       } catch(e) { console.warn('[Audio] Context 建立失敗', e); }
+
+      // 瀏覽器的自動播放限制：<audio>.play() 一定要在使用者手動互動之後才會成功，
+      // 所以「重新整理/重開 App 後接續播放上次的 BGM」也只能掛在這個 once 監聽器裡，
+      // 玩家第一次點畫面的當下順便嘗試接續播放（如果上次是開著音樂離開的）。
+      this._resumeBgmIfEnabled();
     };
 
     document.addEventListener('click',    initCtx, { once: true });
@@ -116,24 +171,35 @@ export const Audio = {
 
   setMusicEnabled(v) {
     useGameStore.setState(s => ({ settings: { ...s.settings, musicEnabled: v } }));
-    if (this._bgmAudio) {
-      v ? this._bgmAudio.play().catch(() => {}) : this._bgmAudio.pause();
-    } else if (v) {
-      const url = useGameStore.getState().settings?.customBGM;
-      if (url) this.playCustomBGM(url);
-    }
+    v ? this.playGameBGM() : this.stopCustomBGM();
   },
 
-  playGameBGM() {
+  // ─── 播放「現在該播的 BGM」：有自訂音樂就播自訂的，沒有就播預設的 ───
+  // 呼叫時機：① 玩家在 Settings 手動開啟音樂開關 ② App 啟動後第一次互動時嘗試接續播放
+  async playGameBGM() {
     const settings = useGameStore.getState().settings ?? {};
     if (!settings.musicEnabled) return;
-    const url = settings.customBGM || 'audio/default_bgm.mp3';
-    if (url) {
-      if (this._ctx?.state === 'suspended') this._ctx.resume();
-      this.playCustomBGM(url);
+    if (this._ctx?.state === 'suspended') this._ctx.resume();
+
+    if (settings.customBGM === 'custom') {
+      try {
+        const blob = await idbGetBgm();
+        if (blob) {
+          this.playCustomBGM(URL.createObjectURL(blob));
+          return;
+        }
+      } catch (e) {
+        console.warn('[Audio] 讀取自訂音樂失敗，改播預設音樂:', e);
+      }
+      // IndexedDB 裡找不到資料（例如清過瀏覽器資料、換了瀏覽器）：
+      // 旗標跟實際資料對不上，順手修正回 null，避免下次又白跑一趟
+      useGameStore.setState(s => ({ settings: { ...s.settings, customBGM: null } }));
     }
+
+    this.playCustomBGM('audio/default_bgm.mp3');
   },
 
+  // 底層播放器：不分自訂或預設，統一都是 <audio> 播放 + loop
   playCustomBGM(url) {
     if (!useGameStore.getState().settings?.musicEnabled) return;
     this.stopCustomBGM();
@@ -151,5 +217,37 @@ export const Audio = {
       this._bgmAudio.currentTime = 0;
       this._bgmAudio = null;
     }
+  },
+
+  // ─── 上傳自訂 BGM：存進 IndexedDB（跨重整/重開持久化）＋立即播放 ───
+  async uploadCustomBGM(file) {
+    try {
+      await idbSetBgm(file);
+    } catch (e) {
+      // 寫入失敗（例如無痕模式限制儲存）不擋播放，只是這次重整後會失效
+      console.warn('[Audio] 自訂音樂寫入 IndexedDB 失敗，僅本次分頁有效:', e);
+    }
+    useGameStore.setState(s => ({ settings: { ...s.settings, customBGM: 'custom' } }));
+    this.playCustomBGM(URL.createObjectURL(file));
+  },
+
+  // ─── 清除自訂 BGM：連 IndexedDB 裡的資料一起清掉，退回預設音樂 ───
+  async clearCustomBGM() {
+    try {
+      await idbClearBgm();
+    } catch (e) {
+      console.warn('[Audio] 清除自訂音樂失敗:', e);
+    }
+    useGameStore.setState(s => ({ settings: { ...s.settings, customBGM: null } }));
+    this.stopCustomBGM();
+    this.playGameBGM();
+  },
+
+  // ─── App 重新整理/重開後，第一次使用者互動時嘗試接續播放上次的 BGM ───
+  _resumeBgmIfEnabled() {
+    if (this._bgmResumeAttempted) return;
+    this._bgmResumeAttempted = true;
+    if (this._bgmAudio) return; // 已經在播了（理論上不會發生，防呆用）
+    this.playGameBGM();
   },
 };

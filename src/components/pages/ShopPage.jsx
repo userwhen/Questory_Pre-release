@@ -5,7 +5,7 @@ import { EventBus } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
 import { useRequestAction } from '@/hooks/useRequestAction.js';
 import { getShopItems, getStackedBag } from '@/utils/shopSelectors.js';
-import { IAP } from '@/plugins/iap.js';
+import CurrencyShopModal from '@/components/ui/CurrencyShopModal.jsx';
 import {
   maskStyle,
   modalStyle as baseModalStyle,
@@ -16,104 +16,10 @@ import {
   inputStyle,
   btnStyle,
 } from '@/styles/modalStyles.js';
-// ShopPage 的 Modal 有自訂 maxHeight（animation 已經包含在 baseModalStyle 裡，不需要再覆寫一次）
 const modalStyle = { ...baseModalStyle, maxHeight: '85vh' };
-
-/* ─── 購買鑽石 Modal ─────────────────────────── */
-function GemShopModal({ onClose }) {
-  const { freeGem, paidGem } = useGameStore(s => ({
-    freeGem: s.freeGem ?? 0,
-    paidGem: s.paidGem ?? 0,
-  }));
-  const [loading, setLoading] = useState(false);
-
-  const products = IAP.getProducts();
-
-  const handleBuy = async (sku) => {
-    setLoading(true);
-    const result = await IAP.purchase(sku);
-    setLoading(false);
-    // IAP.purchase()（_mockPurchase / 未來的 _livePurchase）已經自己 emit 過對應的
-    // TOAST 文案了，這裡不需要再重複 emit 一次。
-    if (result.success) {
-      onClose();
-    }
-  };
-
-  const handleRestore = async () => {
-    setLoading(true);
-    await IAP.restorePurchases();
-    setLoading(false);
-  };
-
-  return (
-    <div style={maskStyle} onClick={onClose}>
-      <div style={{ ...modalStyle, maxHeight: '88vh' }} onClick={e => e.stopPropagation()}>
-        <div style={modalHeadStyle}>
-          <span style={{ fontWeight: 700 }}>💎 購買鑽石</span>
-          <button style={closeXStyle} onClick={onClose}>✕</button>
-        </div>
-
-        {/* 目前持有 */}
-        <div style={{ padding: '12px 16px 0', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted, #8c6e52)', marginBottom: 4 }}>目前持有</div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
-            <span style={{ fontWeight: 800, color: 'var(--color-info, #2980b9)' }}>💎 免費 {freeGem}</span>
-            <span style={{ fontWeight: 800, color: 'var(--color-info, #2980b9)' }}>💠 付費 {paidGem}</span>
-          </div>
-        </div>
-
-        {/* 商品列表 */}
-        <div style={{ padding: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          {products.map(p => (
-            <button
-              key={p.sku}
-              disabled={loading}
-              onClick={() => handleBuy(p.sku)}
-              style={{
-                border: p.badge ? '2px solid var(--color-gold, #f5a623)' : '1px solid var(--border, rgba(0,0,0,0.09))',
-                borderRadius: 14, padding: '14px 10px',
-                background: p.badge ? 'var(--color-gold-soft, #fef3c7)' : 'var(--bg-card, #fff)',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                position: 'relative', opacity: loading ? 0.6 : 1,
-                fontFamily: 'inherit',
-              }}
-            >
-              {p.badge && (
-                <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', background: 'var(--color-gold, #f5a623)', color: '#fff', fontSize: '0.6rem', fontWeight: 900, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap' }}>
-                  {p.badge}
-                </div>
-              )}
-              <div style={{ fontSize: '2rem' }}>{p.icon}</div>
-              <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--color-info, #2980b9)' }}>{p.gems}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted, #8c6e52)' }}>{p.label}</div>
-              <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text, #2c1a0e)', marginTop: 2 }}>{p.price}</div>
-              {p.savePct && (
-                <div style={{ fontSize: '0.68rem', background: 'var(--color-danger, #c0392b)', color: '#fff', padding: '1px 6px', borderRadius: 999 }}>省 {p.savePct}%</div>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* 恢復購買 */}
-        <div style={{ padding: '0 16px 16px', textAlign: 'center' }}>
-          <button
-            onClick={handleRestore}
-            disabled={loading}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted, #8c6e52)', fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}
-          >
-            恢復已購買項目
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const drawerAnim = `@keyframes drawerUp { from { transform:translateY(100%); } to { transform:translateY(0); } }`;
 
-// 隱藏數字輸入框的上下箭頭
 const numberInputCss = `input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }`;
 
@@ -123,14 +29,14 @@ const CAT_ICONS = { '熱量': '🔥', '時間': '⏳', '金錢': '💰', '其他
 /* ─── 購買 Modal ─────────────────────────────────────── */
 function BuyModal({ item, onClose }) {
   const [qty, setQty] = useState(1);
-  const gold    = useGameStore(s => s.gold    || 0);
+  const gold = useGameStore(s => s.gold || 0);
   const freeGem = useGameStore(s => s.freeGem || 0);
   const paidGem = useGameStore(s => s.paidGem || 0);
   const totalGem = freeGem + paidGem;
 
   const totalCost = item.price * qty;
   const canAfford = item.currency === 'gold' ? gold >= totalCost : totalGem >= totalCost;
-  const currIcon  = item.currency === 'gold' ? '💰' : '💎';
+  const currIcon = item.currency === 'gold' ? '💰' : '💎';
 
   const { run, loading: buying } = useRequestAction();
   const handleBuy = () => run(Events.Shop.REQUEST_BUY_ITEM, Events.Shop.BUY_ITEM_RESULT, { id: item.id, qty }, {
@@ -152,7 +58,6 @@ function BuyModal({ item, onClose }) {
           <div style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: 4, color: 'var(--text, #2c1a0e)' }}>{item.name}</div>
           {item.desc && <div style={{ fontSize: '0.85rem', color: 'var(--text-muted, #8c6e52)', marginBottom: 16 }}>{item.desc}</div>}
 
-          {/* 數量選擇 */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
               <span style={qtyLabelStyle}>MIN</span>
@@ -186,7 +91,29 @@ function BuyModal({ item, onClose }) {
   );
 }
 
-/* ─── 道具詳情 Modal ─────────────────────────────────── */
+/* ─── 寵物道具（唯讀，無 footer）─────────────────────── */
+function PetItemDetailModal({ item, onClose }) {
+  // 只記錄「存在狀態」跟「數量」，實際互動/合成/孵化交還給寵物頁面，
+  // 這裡不發任何 REQUEST_USE_ITEM / REQUEST_DISCARD_ITEM。
+  return (
+    <div style={maskStyle} onClick={onClose}>
+      <div style={modalStyle} onClick={e => e.stopPropagation()}>
+        <div style={modalHeadStyle}>
+          <span style={{ fontWeight: 700 }}>📦 物品詳情</span>
+          <button style={closeXStyle} onClick={onClose}>✕</button>
+        </div>
+        <div style={{ padding: 20, textAlign: 'center' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 8 }}>{item.icon || '🐾'}</div>
+          <div style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: 4, color: 'var(--text, #2c1a0e)' }}>{item.name}</div>
+          {item.desc && <div style={{ fontSize: '0.85rem', color: 'var(--text-muted, #8c6e52)', marginBottom: 16 }}>{item.desc}</div>}
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-ghost, #9C7B5B)' }}>擁有 {item.count} 顆</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── 一般道具詳情（可使用/丟棄）───────────────────────── */
 function ItemDetailModal({ item, onClose }) {
   const [qty, setQty] = useState(1);
 
@@ -248,12 +175,65 @@ function ItemDetailModal({ item, onClose }) {
 /* ─── 上架表單 Modal ─────────────────────────────────── */
 const UPLOAD_CATS = ['熱量', '時間', '金錢', '其他'];
 
+function SectionHeader({ children }) {
+  return (
+    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted, #8c6e52)', letterSpacing: '0.06em', margin: '18px 0 8px' }}>
+      {children}
+    </div>
+  );
+}
+
+function CategoryPicker({ value, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {UPLOAD_CATS.map(c => (
+        <button
+          key={c}
+          type="button"
+          onClick={() => onChange(c)}
+          style={{
+            padding: '7px 14px', borderRadius: 999, fontWeight: 700, fontSize: '0.8rem',
+            border: value === c ? 'none' : '1px solid var(--border-input, #d5c5a8)',
+            background: value === c ? 'var(--color-correct, #227A59)' : 'var(--bg-input, #fff)',
+            color: value === c ? '#fff' : 'var(--text, #2c1a0e)',
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >{CAT_ICONS[c]} {c}</button>
+      ))}
+    </div>
+  );
+}
+
+function ResetTypeToggle({ value, onChange }) {
+  const opts = [['once', '單次', '用完即下架'], ['daily', '常駐', '每日重置庫存']];
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      {opts.map(([v, label, hint]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onChange(v)}
+          style={{
+            flex: 1, padding: '8px 6px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center',
+            border: value === v ? '1.5px solid var(--color-correct, #227A59)' : '1.5px solid var(--border-input, #d5c5a8)',
+            background: value === v ? 'rgba(34,122,89,0.1)' : 'var(--bg-input, #fff)',
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text, #2c1a0e)' }}>{label}</div>
+          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted, #8c6e52)', marginTop: 2 }}>{hint}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function QtyField({ label, value, onChange }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
       <label style={labelStyle}>{label}</label>
       <input
         type="number"
+        min="0"
         value={value}
         onChange={e => onChange(e.target.value)}
         style={{ ...inputStyle, marginBottom: 0 }}
@@ -268,24 +248,28 @@ function DynamicFields({ category, val, onValChange }) {
       ? val.split('|')
       : [val || '', ''];
     return (
-      <div style={{ flex: 1 }}>
-        <label style={labelStyle}>Kcal 估值</label>
-        <input
-          type="number"
-          value={kcal}
-          placeholder="熱量..."
-          onChange={e => onValChange(`${e.target.value}|${size}`)}
-          style={{ ...inputStyle, marginBottom: 6 }}
-        />
-        <label style={labelStyle}>ml / g 估值</label>
-        <input
-          type="number"
-          value={size}
-          placeholder="份量..."
-          onChange={e => onValChange(`${kcal}|${e.target.value}`)}
-          style={{ ...inputStyle, marginBottom: 0 }}
-        />
-      </div>
+      <>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>Kcal 估值</label>
+          <input
+            type="number"
+            value={kcal}
+            placeholder="熱量..."
+            onChange={e => onValChange(`${e.target.value}|${size}`)}
+            style={{ ...inputStyle, marginBottom: 0 }}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>ml / g 估值</label>
+          <input
+            type="number"
+            value={size}
+            placeholder="份量..."
+            onChange={e => onValChange(`${kcal}|${e.target.value}`)}
+            style={{ ...inputStyle, marginBottom: 0 }}
+          />
+        </div>
+      </>
     );
   }
   if (category === '時間') {
@@ -315,10 +299,10 @@ function DynamicFields({ category, val, onValChange }) {
       </div>
     );
   }
-  return <div style={{ flex: 1 }} />;
+  return null;
 }
 
-const ICON_POOL = ['📦','🍎','🍕','🍜','🧃','☕','🏃','💪','😴','📚','🎮','💊','🎁','⚔️','🛡️','✨','💰','💎','🔥','⏳'];
+const ICON_POOL = ['📦', '🍎', '🍕', '🍜', '🧃', '☕', '🏃', '💪', '😴', '📚', '🎮', '💊', '🎁', '⚔️', '🛡️', '✨', '💰', '💎', '🔥', '⏳'];
 
 function UploadModal({ editItem, onClose }) {
   const isEdit = !!editItem;
@@ -350,26 +334,22 @@ function UploadModal({ editItem, onClose }) {
           <button style={closeXStyle} onClick={onClose}>✕</button>
         </div>
 
-        <div style={{ padding: 16, overflowY: 'auto', flex: 1 }}>
+        <div style={{ padding: '4px 16px 16px', overflowY: 'auto', flex: 1 }}>
 
-          {/* 圖示 + 名稱 */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 0 }}>
-            <div style={{ flexShrink: 0 }}>
-              <label style={labelStyle}>圖示</label>
-              <button
-                onClick={() => setShowIconPicker(p => !p)}
-                style={{ width: 48, height: 48, borderRadius: 10, border: '1.5px solid var(--border-input, #d5c5a8)', background: 'var(--bg-input, #fff)', fontSize: '1.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >{form.icon}</button>
-            </div>
+          <SectionHeader>商品資訊</SectionHeader>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <button
+              onClick={() => setShowIconPicker(p => !p)}
+              style={{ flexShrink: 0, width: 52, height: 52, borderRadius: 12, border: '1.5px solid var(--border-input, #d5c5a8)', background: 'var(--bg-input, #fff)', fontSize: '1.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >{form.icon}</button>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>商品名稱</label>
-              <input style={inputStyle} placeholder="輸入名稱..." value={form.name} onChange={e => set('name', e.target.value)} />
+              <input style={{ ...inputStyle, marginBottom: 10 }} placeholder="商品名稱..." value={form.name} onChange={e => set('name', e.target.value)} />
+              <textarea style={{ ...inputStyle, resize: 'none', minHeight: 48, marginBottom: 0 }} placeholder="一句話描述這個商品..." value={form.desc} onChange={e => set('desc', e.target.value)} />
             </div>
           </div>
 
-          {/* 圖示選擇器 */}
           {showIconPicker && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 0', marginBottom: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 0 0' }}>
               {ICON_POOL.map(ic => (
                 <button key={ic} onClick={() => { set('icon', ic); setShowIconPicker(false); }}
                   style={{ width: 36, height: 36, borderRadius: 8, border: form.icon === ic ? '2px solid var(--color-correct, #227A59)' : '1px solid var(--border-input, #d5c5a8)', background: 'var(--bg-input, #fff)', fontSize: '1.3rem', cursor: 'pointer' }}>{ic}</button>
@@ -377,34 +357,20 @@ function UploadModal({ editItem, onClose }) {
             </div>
           )}
 
-          {/* 描述 */}
-          <label style={labelStyle}>描述</label>
-          <textarea style={{ ...inputStyle, resize: 'none', minHeight: 52 }} placeholder="說明..." value={form.desc} onChange={e => set('desc', e.target.value)} />
-
-          {/* 分類 + 動態欄位 */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
-            <div style={{ flex: 1 }}>
-              <label style={labelStyle}>分類</label>
-              <select style={{ ...inputStyle, marginBottom: 0 }} value={form.category}
-                onChange={e => { set('category', e.target.value); set('val', ''); }}>
-                {UPLOAD_CATS.map(c => <option key={c} value={c}>{CAT_ICONS[c]} {c}</option>)}
-              </select>
+          <SectionHeader>效果設定</SectionHeader>
+          <CategoryPicker value={form.category} onChange={c => { set('category', c); set('val', ''); }} />
+          {form.category !== '其他' && (
+            <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+              <DynamicFields category={form.category} val={form.val} onValChange={v => set('val', v)} />
             </div>
-            <DynamicFields category={form.category} val={form.val} onValChange={v => set('val', v)} />
-          </div>
+          )}
 
-          {/* 價格 / 庫存 / 重置 */}
-          <div style={{ display: 'flex', gap: 8 }}>
+          <SectionHeader>販售設定</SectionHeader>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
             <QtyField label="價格 💰" value={form.price} onChange={v => set('price', v)} />
             <QtyField label="庫存" value={form.qty} onChange={v => set('qty', v)} />
-            <div style={{ flex: 1 }}>
-              <label style={labelStyle}>重置</label>
-              <select style={{ ...inputStyle, marginBottom: 0 }} value={form.type} onChange={e => set('type', e.target.value)}>
-                <option value="once">單次</option>
-                <option value="daily">常駐</option>
-              </select>
-            </div>
           </div>
+          <ResetTypeToggle value={form.type} onChange={v => set('type', v)} />
 
         </div>
 
@@ -420,7 +386,7 @@ function UploadModal({ editItem, onClose }) {
 /* ─── 背包抽屜 ──────────────────────────────────────── */
 function BagDrawer({ isOpen, onToggle, onUseItem }) {
   const [bagCat, setBagCat] = useState('全部');
-  const bagCats = ['全部', '熱量', '時間', '金錢', '其他'];
+  const bagCats = ['全部', '熱量', '時間', '金錢', '其他', '寵物'];
 
   const bag = useGameStore(s => s.bag);
   const filtered = useMemo(() => getStackedBag(bag, bagCat), [bag, bagCat]);
@@ -428,16 +394,13 @@ function BagDrawer({ isOpen, onToggle, onUseItem }) {
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
       <style>{drawerAnim}</style>
-      {/* 半透明背景 */}
       {isOpen && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', pointerEvents: 'auto', zIndex: 10 }}
-             onClick={onToggle} />
+          onClick={onToggle} />
       )}
-      {/* 抽屜本體 */}
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 300, background: 'var(--bg-panel, #f7e7ce)', borderTop: '2px solid var(--border-wood, #3e2723)', borderRadius: '16px 16px 0 0', pointerEvents: 'auto', zIndex: 11, transform: isOpen ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25,1,0.5,1)', display: 'flex', flexDirection: 'column' }}>
-        {/* 把手 */}
         <div style={{ position: 'absolute', top: -36, right: 16, background: 'var(--bg-nav, #1e1208)', color: 'var(--color-gold, #f5a623)', border: '1px solid var(--color-gold, #f5a623)', borderRadius: '8px 8px 0 0', padding: '6px 20px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', pointerEvents: 'auto', zIndex: 12 }}
-             onClick={onToggle}>
+          onClick={onToggle}>
           {isOpen ? '▼ 背包' : '▲ 背包'}
         </div>
 
@@ -482,55 +445,56 @@ const NPC_LINES = [
   '今天手氣不錯，多買一點吧？',
 ];
 
-// ⚠️ 新增：initialOpenGemShop——比照 TaskPage 的 initialOpenForm 慣例，
-//    讓 GameLayout 的 'shop_gems' 路由可以直接開啟購買鑽石 Modal，
-//    不用先進商店頁再手動點一次鑽石＋按鈕。
-export default function ShopPage({ initialOpenGemShop = false }) {
-  const [cat,        setCat]        = useState('全部');
-  const [buyTarget,  setBuyTarget]  = useState(null);
-  const [useTarget,  setUseTarget]  = useState(null);
+export default function ShopPage() {
+  const [cat, setCat] = useState('全部');
+  const [buyTarget, setBuyTarget] = useState(null);
+  const [useTarget, setUseTarget] = useState(null);
   const [uploadItem, setUploadItem] = useState(undefined);
-  const [bagOpen,    setBagOpen]    = useState(false);
-  const [npcLine,    setNpcLine]    = useState(0);
-  const [showGemShop, setShowGemShop] = useState(initialOpenGemShop);
+  const [bagOpen, setBagOpen] = useState(false);
+  const [npcLine, setNpcLine] = useState(0);
+  const [currencyShopTab, setCurrencyShopTab] = useState(null); // null=關閉，'gem'|'gold'
 
+  const gold = useGameStore(s => s.gold ?? 0);
   const totalGem = useGameStore(s => (s.freeGem ?? 0) + (s.paidGem ?? 0));
 
   const cycleNpc = useCallback(() => {
     setNpcLine(n => (n + 1) % NPC_LINES.length);
   }, []);
 
-  // 注意：sysShop / shop.user / bag 都已經是 useGameStore 的 reactive selector，
-  // shop.js 的更新也都是 immutable 寫法，store 變動時本來就會自動觸發重新渲染，
-  // 不需要額外訂閱 Events.Shop.UPDATED / BAG_UPDATED 再手動 setState 強制刷新
-  // （先前這裡多了一個沒被使用的 tick state 就是這種重複訂閱，已移除）。
-
   const sysShop = useGameStore(s => s.sysShop);
   const userShopItems = useGameStore(s => s.shop?.user);
   const items = useMemo(() => getShopItems(sysShop, userShopItems, cat), [sysShop, userShopItems, cat]);
 
-  const handleBuy  = useCallback(item => setBuyTarget(item), []);
+  const handleBuy = useCallback(item => setBuyTarget(item), []);
   const handleEdit = useCallback(item => setUploadItem(item), []);
 
   return (
     <div style={pageStyle}>
-      {/* ── NPC 區域 ── */}
       <div style={npcAreaStyle}>
         <div style={npcAvatarStyle} onClick={cycleNpc}>🧝</div>
         <div style={npcBubbleStyle}>
           <div style={npcArrowStyle} />
           <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text, #2c1a0e)' }}>{NPC_LINES[npcLine]}</span>
         </div>
-        <button
-          onClick={() => setShowGemShop(true)}
-          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(245,166,35,0.15)', border: '1.5px solid var(--color-gold, #f5a623)', borderRadius: 999, padding: '6px 12px', cursor: 'pointer', fontFamily: 'inherit' }}
-        >
-          <span style={{ fontSize: '1rem' }}>💎</span>
-          <span style={{ fontWeight: 800, color: 'var(--color-gold, #f5a623)', fontSize: '0.82rem' }}>{totalGem}</span>
-          <span style={{ fontSize: '0.78rem', color: 'var(--color-gold-dark, #c47d0e)', fontWeight: 700 }}>＋</span>
-        </button>
+        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button
+            onClick={() => setCurrencyShopTab('gem')}
+            style={currencyBtnStyle('gem')}
+          >
+            <span style={{ fontSize: '1rem' }}>💎</span>
+            <span style={{ fontWeight: 800, color: 'var(--color-gold, #f5a623)', fontSize: '0.82rem' }}>{totalGem}</span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--color-gold-dark, #c47d0e)', fontWeight: 700 }}>＋</span>
+          </button>
+          <button
+            onClick={() => setCurrencyShopTab('gold')}
+            style={currencyBtnStyle('gold')}
+          >
+            <span style={{ fontSize: '1rem' }}>💰</span>
+            <span style={{ fontWeight: 800, color: 'var(--color-gold-dark, #c47d0e)', fontSize: '0.82rem' }}>{gold.toLocaleString()}</span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--color-gold-dark, #c47d0e)', fontWeight: 700 }}>＋</span>
+          </button>
+        </div>
       </div>
-      {/* ── 過濾列 ── */}
       <div style={filterBarStyle}>
         <div style={{ flex: 1, display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none' }}>
           {CATS.map(c => (
@@ -541,7 +505,6 @@ export default function ShopPage({ initialOpenGemShop = false }) {
         <button style={{ ...filterBtnStyle, flexShrink: 0, marginLeft: 6 }} onClick={() => setUploadItem(null)}>⬆️ 上架</button>
       </div>
 
-      {/* ── 商品列表 ── */}
       <div style={scrollAreaStyle}>
         {items.length === 0 ? (
           <div style={emptyStyle}>
@@ -552,8 +515,8 @@ export default function ShopPage({ initialOpenGemShop = false }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, padding: '10px 10px 120px' }}>
             {items.map(item => {
               const isSoldOut = item.qty <= 0;
-              const currIcon  = item.currency === 'gold' ? '💰' : '💎';
-              const isUser    = item.id?.startsWith('usr_');
+              const currIcon = item.currency === 'gold' ? '💰' : '💎';
+              const isUser = item.id?.startsWith('usr_');
               return (
                 <div key={item.id} style={{ ...shopCardStyle, opacity: isSoldOut ? 0.6 : 1, position: 'relative' }}>
                   {isSoldOut && (
@@ -581,34 +544,42 @@ export default function ShopPage({ initialOpenGemShop = false }) {
         )}
       </div>
 
-      {/* ── 背包抽屜 ── */}
       <BagDrawer isOpen={bagOpen} onToggle={() => setBagOpen(o => !o)} onUseItem={setUseTarget} />
 
-      {/* ── Modals ── */}
-      {buyTarget  && <BuyModal     item={buyTarget}  onClose={() => setBuyTarget(null)} />}
-      {useTarget  && <ItemDetailModal item={useTarget} onClose={() => setUseTarget(null)} />}
+      {buyTarget && <BuyModal item={buyTarget} onClose={() => setBuyTarget(null)} />}
+      {useTarget && (
+        useTarget.category === '寵物'
+          ? <PetItemDetailModal item={useTarget} onClose={() => setUseTarget(null)} />
+          : <ItemDetailModal item={useTarget} onClose={() => setUseTarget(null)} />
+      )}
       {uploadItem !== undefined && (
         <UploadModal editItem={uploadItem} onClose={() => setUploadItem(undefined)} />
       )}
-      {showGemShop && <GemShopModal onClose={() => setShowGemShop(false)} />}
+      {currencyShopTab && <CurrencyShopModal initialTab={currencyShopTab} onClose={() => setCurrencyShopTab(null)} />}
     </div>
   );
 }
 
 /* ─── 樣式 ──────────────────────────────────────────── */
-const pageStyle      = { display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg-panel, #f7e7ce)', position: 'relative' };
-const npcAreaStyle   = { flexShrink: 0, background: 'var(--bg-hud, #2c1a0e)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, height: 90 };
+const pageStyle = { display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg-panel, #f7e7ce)', position: 'relative' };
+const npcAreaStyle = { flexShrink: 0, background: 'var(--bg-hud, #2c1a0e)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, minHeight: 90 };
 const npcAvatarStyle = { width: 60, height: 60, borderRadius: '50%', border: '2px solid var(--color-gold, #f5a623)', background: 'var(--bg-nav, #1e1208)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', flexShrink: 0, cursor: 'pointer' };
 const npcBubbleStyle = { background: 'var(--bg-card, #fff)', padding: '10px 14px', borderRadius: 12, position: 'relative', flex: 1, boxShadow: 'var(--shadow-sm)' };
-const npcArrowStyle  = { position: 'absolute', left: -8, top: '50%', transform: 'translateY(-50%)', width: 0, height: 0, borderTop: '7px solid transparent', borderBottom: '7px solid transparent', borderRight: '8px solid var(--bg-card, #fff)' };
+const npcArrowStyle = { position: 'absolute', left: -8, top: '50%', transform: 'translateY(-50%)', width: 0, height: 0, borderTop: '7px solid transparent', borderBottom: '7px solid transparent', borderRight: '8px solid var(--bg-card, #fff)' };
+const currencyBtnStyle = (kind) => ({
+  flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5,
+  background: kind === 'gem' ? 'rgba(245,166,35,0.15)' : 'rgba(196,125,14,0.12)',
+  border: `1.5px solid ${kind === 'gem' ? 'var(--color-gold, #f5a623)' : 'var(--color-gold-dark, #c47d0e)'}`,
+  borderRadius: 999, padding: '6px 12px', cursor: 'pointer', fontFamily: 'inherit',
+});
 const filterBarStyle = { flexShrink: 0, display: 'flex', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-elevated, #fdf0d8)', borderBottom: '1px solid var(--border, rgba(0,0,0,0.09))' };
 const filterBtnStyle = { flexShrink: 0, borderRadius: 50, padding: '4px 12px', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', transition: '0.15s', fontFamily: 'inherit', whiteSpace: 'nowrap' };
 const scrollAreaStyle = { flex: 1, overflowY: 'auto', overflowX: 'hidden' };
-const emptyStyle     = { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center', opacity: 0.5 };
-const shopCardStyle  = { background: 'var(--bg-card, #fff)', borderRadius: 12, padding: '12px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-card, rgba(0,0,0,0.07))' };
+const emptyStyle = { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center', opacity: 0.5 };
+const shopCardStyle = { background: 'var(--bg-card, #fff)', borderRadius: 12, padding: '12px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-card, rgba(0,0,0,0.07))' };
 const shopBuyBtnStyle = { width: '100%', padding: '6px 0', background: 'var(--color-correct, #227A59)', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: 'inherit' };
-const bagItemStyle   = { background: 'var(--bg-card, #fff)', borderRadius: 10, padding: '8px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, border: '1px solid var(--border-card, rgba(0,0,0,0.07))', cursor: 'pointer' };
+const bagItemStyle = { background: 'var(--bg-card, #fff)', borderRadius: 10, padding: '8px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, border: '1px solid var(--border-card, rgba(0,0,0,0.07))', cursor: 'pointer' };
 
-const qtyBtnStyle    = { width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-box, rgba(0,0,0,0.035))', border: '1.5px solid var(--border-input, #d5c5a8)', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' };
-const qtyInputStyle  = { width: 56, height: 36, borderRadius: 8, border: '1.5px solid var(--border-input, #d5c5a8)', textAlign: 'center', fontSize: '1.2rem', fontWeight: 800, fontFamily: 'inherit', background: 'var(--bg-input, #fff)', color: 'var(--text, #2c1a0e)', outline: 'none', MozAppearance: 'textfield', WebkitAppearance: 'none' };
-const qtyLabelStyle  = { fontSize: '0.6rem', fontWeight: 700, color: 'var(--text-muted, #8c6e52)', letterSpacing: '0.08em' };
+const qtyBtnStyle = { width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-box, rgba(0,0,0,0.035))', border: '1.5px solid var(--border-input, #d5c5a8)', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' };
+const qtyInputStyle = { width: 56, height: 36, borderRadius: 8, border: '1.5px solid var(--border-input, #d5c5a8)', textAlign: 'center', fontSize: '1.2rem', fontWeight: 800, fontFamily: 'inherit', background: 'var(--bg-input, #fff)', color: 'var(--text, #2c1a0e)', outline: 'none', MozAppearance: 'textfield', WebkitAppearance: 'none' };
+const qtyLabelStyle = { fontSize: '0.6rem', fontWeight: 700, color: 'var(--text-muted, #8c6e52)', letterSpacing: '0.08em' };

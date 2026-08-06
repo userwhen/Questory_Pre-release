@@ -1,5 +1,5 @@
 /* src/components/pages/SettingsPage.jsx */
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useGameStore } from '@/core/state.js';
 import { useShallow } from 'zustand/react/shallow'; // 👉 引入 Zustand 官方淺層比較工具
 import { EventBus } from '@/core/events.js';
@@ -19,6 +19,25 @@ function Toggle({ checked, onChange, locked }) {
     <div style={{ width: 42, height: 24, borderRadius: 9999, background: checked ? 'var(--color-correct, #227A59)' : 'var(--border-input, #d5c5a8)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: '0.2s' }}
          onClick={onChange}>
       <div style={{ position: 'absolute', width: 18, height: 18, background: '#fff', borderRadius: '50%', top: 3, left: checked ? 21 : 3, transition: '0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
+    </div>
+  );
+}
+
+/* ─── 鎖定功能的解鎖入口：Pro 按鈕（樣式同主題商店的 Pro 按鈕）＋
+   選配鑽石購買（只有帶 shopItem 的功能才顯示，例如 Pet/Learning）＋
+   成就免費解鎖提示（目前純文字，成就系統做出來後不用動這裡）───── */
+function FeatureLockActions({ label, shopItem }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button style={smallBtnStyle} onClick={() => EventBus.emit(Events.Settings.REQUEST_SHOW_PRO_UPSELL, { label })}>👑 Pro</button>
+        {shopItem && (
+          <button style={smallBtnStyle} onClick={() => EventBus.emit(Events.Settings.REQUEST_BUY_ITEM, { id: shopItem.id })}>
+            💎 {shopItem.price}
+          </button>
+        )}
+      </div>
+      <div style={{ fontSize: '0.65rem', color: 'var(--text-ghost, #9C7B5B)' }}>🏆 或完成特定成就免費解鎖</div>
     </div>
   );
 }
@@ -63,7 +82,6 @@ function ThemeShopModal({ onClose }) {
 
   const storyItems  = SettingsShopItems.filter(i => i.type === 'theme_story');
   const basicItems  = SettingsShopItems.filter(i => i.type === 'theme_basic');
-  const moduleItems = SettingsShopItems.filter(i => i.type === 'module');
 
   const renderThemeCard = item => {
     const themeKey = item.preview;
@@ -105,31 +123,12 @@ function ThemeShopModal({ onClose }) {
     );
   };
 
-  const renderModuleCard = item => {
-    const owned    = unlocks[item.id];
-    const isActive = owned && (settings[item.id + '_active'] !== false);
-    return (
-      <div key={item.id} style={{ ...themeCardStyle, flexDirection: 'column', alignItems: 'flex-start' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: 6 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text, #2c1a0e)' }}>{item.name}</div>
-          {owned
-            ? <Toggle checked={isActive} onChange={() => EventBus.emit(Events.Settings.REQUEST_TOGGLE_MODULE, { id: item.id })} />
-            : <button style={smallBtnStyle} onClick={() => EventBus.emit(Events.Settings.REQUEST_BUY_ITEM, { id: item.id })}>💎 {item.price}</button>
-          }
-        </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted, #8c6e52)', lineHeight: 1.4 }}>{item.desc}</div>
-      </div>
-    );
-  };
-
   return (
     <Modal title="🛒 主題商店" onClose={onClose} bodyStyle={{ padding: '12px 14px' }}>
           <SectionTitle>✨ 沉浸世界</SectionTitle>
           {storyItems.map(renderThemeCard)}
           <SectionTitle>🎨 基礎面板</SectionTitle>
           {basicItems.map(renderThemeCard)}
-          <SectionTitle>🧩 擴充模組</SectionTitle>
-          {moduleItems.map(renderModuleCard)}
           <div style={{ height: 20 }} />
     </Modal>
   );
@@ -181,8 +180,13 @@ export default function SettingsPage() {
 
   const isPro = !!subscription.active; // 訂閱期間（含測試假訂閱）：Pro 主題 + 熱量追蹤 + 嚴格模式全部解鎖
 
-  const [modal, setModal] = useState(null); // 'theme' | 'reset' | 'import'
+  const [modal, setModal] = useState(null); // 'theme' | 'reset' | 'import' | 'petOff'
   const [calInput, setCalInput] = useState(settings.calMax || 2000);
+  const [lostFeatures, setLostFeatures] = useState(null); // 訂閱到期/取消時，列出被鎖住的功能清單
+
+  useEffect(() => EventBus.on(Events.Settings.SUBSCRIPTION_FEATURES_LOST, ({ features }) => {
+    setLostFeatures(features);
+  }), []);
 
   const set = (key, val) => EventBus.emit(Events.Settings.REQUEST_APPLY_SETTINGS, { [key]: val });
 
@@ -190,6 +194,14 @@ export default function SettingsPage() {
     const curThemeLabel = getThemeCfg(settings.theme || 'default')?.label
     ?? SettingsShopItems.find(i => i.preview === settings.theme)?.name
     ?? '⚙️ 預設主題';
+
+  // 遊戲模式鎖定功能：訂閱期間（含測試假訂閱）全部自動解鎖，非訂閱則各自看 unlocks
+  const petItem = SettingsShopItems.find(i => i.id === 'module_pet');
+  const learningItem = SettingsShopItems.find(i => i.id === 'learning');
+  const calUnlocked = !!unlocks.feature_cal || isPro;
+  const strictUnlocked = !!unlocks.feature_strict || isPro;
+  const petUnlocked = !!unlocks.module_pet || isPro;
+  const learningUnlocked = !!unlocks.learning || isPro;
 
   return (
     <div style={pageStyle}>
@@ -277,13 +289,10 @@ export default function SettingsPage() {
               onChange={() => set('mode', settings.mode === 'basic' ? 'adventurer' : 'basic')}
             />
           </SettingRow>
-          <SettingRow icon="🔥" label="卡路里追蹤" hint="記錄每日熱量攝取與消耗"
-            locked={!unlocks.feature_cal && !isPro}>
-            <Toggle
-              checked={!!settings.calMode}
-              locked={!unlocks.feature_cal && !isPro}
-              onChange={() => set('calMode', !settings.calMode)}
-            />
+          <SettingRow icon="🔥" label="卡路里追蹤" hint="記錄每日熱量攝取與消耗">
+            {calUnlocked
+              ? <Toggle checked={!!settings.calMode} onChange={() => set('calMode', !settings.calMode)} />
+              : <FeatureLockActions label="卡路里追蹤" />}
           </SettingRow>
           {settings.calMode && (
             <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border, rgba(0,0,0,0.09))' }}>
@@ -296,13 +305,27 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-          <SettingRow icon="⚡" label="嚴格模式" hint="任務失敗將回收已獲得獎勵"
-            locked={!unlocks.feature_strict && !isPro}>
-            <Toggle
-              checked={!!settings.strictMode}
-              locked={!unlocks.feature_strict && !isPro}
-              onChange={() => set('strictMode', !settings.strictMode)}
-            />
+          <SettingRow icon="⚡" label="嚴格模式" hint="任務失敗將回收已獲得獎勵">
+            {strictUnlocked
+              ? <Toggle checked={!!settings.strictMode} onChange={() => set('strictMode', !settings.strictMode)} />
+              : <FeatureLockActions label="嚴格模式" />}
+          </SettingRow>
+          <SettingRow icon="🐾" label="寵物陪伴系統" hint={petItem?.desc ?? '解鎖大廳專屬寵物與互動功能'}>
+            {petUnlocked
+              ? <Toggle
+                  checked={settings.module_pet_active !== false}
+                  onChange={() => {
+                    // 關閉前要跳確認（會清空當前寵物）；開啟不用，直接切
+                    if (settings.module_pet_active !== false) setModal('petOff');
+                    else EventBus.emit(Events.Settings.REQUEST_TOGGLE_MODULE, { id: 'module_pet' });
+                  }}
+                />
+              : <FeatureLockActions label="寵物陪伴系統" shopItem={petItem} />}
+          </SettingRow>
+          <SettingRow icon="📚" label="語言學習模組" hint={learningItem?.desc ?? '解鎖多語言劇情與單字替換功能'}>
+            {learningUnlocked
+              ? <Toggle checked={settings.learningMode !== false} onChange={() => set('learningMode', settings.learningMode === false)} />
+              : <FeatureLockActions label="語言學習模組" shopItem={learningItem} />}
           </SettingRow>
         </div>
 
@@ -349,15 +372,11 @@ export default function SettingsPage() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted, #8c6e52)' }}>
-                  {settings.customBGM ? '✅ 已上傳自訂音樂' : '尚未上傳自訂音樂'}
+                  {settings.customBGM === 'custom' ? '✅ 已上傳自訂音樂' : '尚未上傳自訂音樂'}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {settings.customBGM && (
-                    <button style={smallBtnStyle} onClick={() => {
-                      set('customBGM', null);
-                      Audio.stopCustomBGM();
-                      Audio.playGameBGM();
-                    }}>清除</button>
+                  {settings.customBGM === 'custom' && (
+                    <button style={smallBtnStyle} onClick={() => Audio.clearCustomBGM()}>清除</button>
                   )}
                   <button style={smallBtnStyle} onClick={() => {
                     const input = document.createElement('input');
@@ -366,16 +385,14 @@ export default function SettingsPage() {
                     input.onchange = e => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      const url = URL.createObjectURL(file);
-                      set('customBGM', url);
-                      Audio.playCustomBGM(url);
+                      Audio.uploadCustomBGM(file);
                     };
                     input.click();
                   }}>上傳</button>
                 </div>
               </div>
               <div style={{ fontSize: '0.68rem', color: 'var(--text-ghost, #9C7B5B)', marginTop: 6 }}>
-                ⚠️ 上傳僅在本次分頁有效，重新整理頁面後需要重新上傳
+                💾 自訂音樂會保留在裝置上，重新整理或重開 App 後會自動接續播放（無痕模式等限制儲存的環境除外）
               </div>
             </div>
           )}
@@ -473,6 +490,33 @@ export default function SettingsPage() {
         />
       )}
       {modal === 'import' && <ImportModal    onClose={() => setModal(null)} />}
+      {modal === 'petOff' && (
+        <ConfirmDialog
+          icon="🐾"
+          message="確定要關閉寵物系統嗎？"
+          subMessage="目前的寵物會被清空（血統圖鑑、家族歷史不受影響），之後重新開啟要回更衣室重新領養。"
+          confirmText="確定關閉"
+          onConfirm={() => { EventBus.emit(Events.Pet.REQUEST_DISABLE_MODULE); setModal(null); }}
+          onCancel={() => setModal(null)}
+        />
+      )}
+      {lostFeatures && (
+        <Modal
+          title="⚠️ 訂閱已取消"
+          onClose={() => setLostFeatures(null)}
+          maxWidth={320}
+          footer={<button style={{ ...btnStyle, width: '100%' }} onClick={() => setLostFeatures(null)}>知道了</button>}
+        >
+          <div style={{ fontSize: '0.85rem', color: 'var(--text, #2c1a0e)', marginBottom: 10 }}>
+            以下功能因未另外买断，已一併鎖住：
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            {lostFeatures.map(f => (
+              <li key={f} style={{ fontSize: '0.82rem', color: 'var(--text-muted, #8c6e52)', marginBottom: 4 }}>{f}</li>
+            ))}
+          </ul>
+        </Modal>
+      )}
     </div>
   );
 }

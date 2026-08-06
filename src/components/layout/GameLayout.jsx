@@ -8,32 +8,28 @@ import { App as CapacitorApp } from '@capacitor/app';
 import HUD from './HUD.jsx';
 import Navbar from './Navbar.jsx';
 import MainPage from '@/components/pages/MainPage.jsx';
-import TaskPage from '@/components/pages/TaskPage.jsx';
+import TaskPage from '@/task/pages/TaskPage.jsx';
 import StatsPage from '@/components/pages/StatsPage.jsx';
 import ShopPage from '@/components/pages/ShopPage.jsx';
 import SettingsPage from '@/components/pages/SettingsPage.jsx';
-import AvatarPage from '@/components/pages/AvatarPage.jsx';
-import GachaPage from '@/components/pages/GachaPage.jsx';
-import StoryPage from '@/components/pages/StoryPage.jsx';
+import AvatarPage from '@/avatar/pages/AvatarPage.jsx';
+import GachaPage from '@/avatar/pages/GachaPage.jsx';
+import StoryPage from '@/story/pages/StoryPage.jsx';
 import CheckinModal from '@/components/pages/CheckinModal.jsx';
 import TimerModal from '@/components/pages/TimerModal.jsx';
 import ScannerModal from '@/components/pages/ScannerModal.jsx';
 import ToastManager from '@/components/ui/ToastManager.jsx';
-import HelpPage from '@/components/pages/HelpPage.jsx';
+import GemShopModal from '@/components/ui/GemShopModal.jsx';
+import HelpModal from '@/components/ui/HelpModal.jsx';
 
 const FULLSCREEN_PAGES = ['story', 'avatar'];
+const NO_HUD_PAGES = ['shop'];
 
-// 安全區內縮後，各全螢幕頁面自己的底色──避免上下安全區留白的顏色
-// 跟畫面本身背景不同，變成一條突兀色塊
-// story 的頂部安全區已交由 StoryTopBar 內部自己處理[cite: 1]
 const FULLSCREEN_BG = {
   avatar: 'var(--bg-panel, #f7e7ce)',
   story: 'var(--bg-hud, #2c1a0e)',
 };
 
-// ── 固定階層返回邏輯 ─────────────────────────────────────
-// 不是「真實瀏覽紀錄」，是「這一頁規定好的上一層是誰」。
-// ach 已經拿掉：現在只透過 TaskPage 內部分頁進入，不再是 GameLayout 的路由
 const FIXED_PARENTS = {
   gacha: 'avatar',
 };
@@ -42,27 +38,21 @@ function getRoot(mode) {
   return mode === 'basic' ? 'stats' : 'main';
 }
 
-function getParent(pageId, mode, shopGemsOrigin) {
+function getParent(pageId, mode) {
   const root = getRoot(mode);
-  // shop_gems 是唯一的例外：從哪一頁點鑽石開的，返回就回那一頁
-  if (pageId === 'shop_gems') return shopGemsOrigin ?? root;
   return FIXED_PARENTS[pageId] ?? root;
 }
 
 function PageRouter({ pageId, onNavigate, onBack, canGoBack, onRegisterBack }) {
   switch (pageId) {
-    case 'main': return <MainPage onNavigate={onNavigate} />;
-    case 'task': return <TaskPage onRegisterBack={onRegisterBack} />;
-    case 'stats': return <StatsPage />;
-    case 'shop': return <ShopPage />;
-    // ⚠️ HUD 點鑽石直接開購買 Modal 用，比照 'quick' 開任務表單的做法
-    case 'shop_gems': return <ShopPage initialOpenGemShop />;
-    case 'settings': return <SettingsPage />;
-    case 'avatar': return <AvatarPage onNavigate={onNavigate} onBack={onBack} canGoBack={canGoBack} />;
-    case 'story': return <StoryPage onNavigate={onNavigate} onBack={onBack} canGoBack={canGoBack} />;
-    case 'gacha': return <GachaPage />;
-    case 'checkin': return <CheckinModal onClose={onBack} />;
-    case 'timer': return <TimerModal onClose={onBack} />;
+    case 'main':    return <MainPage onNavigate={onNavigate} />;
+    case 'task':    return <TaskPage onRegisterBack={onRegisterBack} />;
+    case 'stats':   return <StatsPage />;
+    case 'shop':    return <ShopPage />;
+    case 'settings':return <SettingsPage />;
+    case 'avatar':  return <AvatarPage onNavigate={onNavigate} onBack={onBack} canGoBack={canGoBack} />;
+    case 'story':   return <StoryPage onNavigate={onNavigate} onBack={onBack} canGoBack={canGoBack} />;
+    case 'gacha':   return <GachaPage />;
     case 'scanner': return (
       <ScannerModal
         onClose={onBack}
@@ -84,12 +74,8 @@ function PageRouter({ pageId, onNavigate, onBack, canGoBack, onRegisterBack }) {
         }}
       />
     );
-    // 'quick' → 直接開啟任務新增（導到 task 頁）
-    case 'quick': return <TaskPage initialOpenForm onRegisterBack={onRegisterBack} />;
-    // 'profile' / 'qa' → 導到對應頁面
     case 'profile': return <StatsPage />;
-    case 'qa': return <HelpPage onNavigate={onNavigate} />;
-    default: return <Placeholder pageId={pageId} />;
+    default:        return <Placeholder pageId={pageId} />;
   }
 }
 
@@ -103,25 +89,34 @@ function Placeholder({ pageId }) {
   );
 }
 
+// 讓「打開哪個全域彈窗」的狀態去登記／取消登記硬體返回鍵攔截，
+// 每個彈窗一行呼叫就好，不用各自重複寫 useEffect。
+function useOverlayBackHandler(id, isOpen, setOpen, registerBackHandler) {
+  useEffect(() => {
+    registerBackHandler(id, isOpen ? () => setOpen(false) : null);
+    return () => registerBackHandler(id, null);
+  }, [id, isOpen, setOpen, registerBackHandler]);
+}
+
 export default function GameLayout() {
   const mode = useGameStore(s => s.settings?.mode ?? 'adventurer');
   const [page, setPage] = useState(() => getRoot(mode));
+
+  // ── 全域彈窗（不是 page，不會讓背景頁面被換掉）──────────
+  const [showGemShop, setShowGemShop] = useState(false);
+  const [showCheckin, setShowCheckin] = useState(false);
+  const [showTimer, setShowTimer] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [showQA, setShowQA] = useState(false);
 
   const pageRef = useRef(page);
   pageRef.current = page;
   const modeRef = useRef(mode);
   modeRef.current = mode;
 
-  const shopGemsOriginRef = useRef(getRoot(mode));
   const hasSentinelRef = useRef(false);
 
-  // ── 頁面內部子畫面的「返回攔截」登記表 ──────────────────
-  // 頁面自己有子畫面打開時（例如 AchPage 的榮譽殿堂、TaskPage 的
-  // history/calendar 分頁），登記一個 handler 進來；沒有打開就登記 null。
-  // 同時間可能有巢狀的兩層都登記著（TaskPage 的分頁 + 裡面 AchPage 的殿堂），
-  // 用「最後一次被設成非 null 的時間」決定現在該由哪一層接手，
-  // 天然對應巢狀關係最內層優先。
-  const backHandlersRef = useRef(new Map()); // id -> { handler, order }
+  const backHandlersRef = useRef(new Map());
   const orderCounterRef = useRef(0);
 
   const registerBackHandler = useCallback((id, handler) => {
@@ -134,7 +129,6 @@ export default function GameLayout() {
     }
   }, []);
 
-  // 回傳 true 表示已經被某個子畫面攔截處理掉了，呼叫端不用再做「跳上一層」
   const consumeBack = useCallback(() => {
     const map = backHandlersRef.current;
     let top = null;
@@ -148,15 +142,22 @@ export default function GameLayout() {
     return false;
   }, []);
 
+  useOverlayBackHandler('gem-shop-modal', showGemShop, setShowGemShop, registerBackHandler);
+  useOverlayBackHandler('checkin-modal', showCheckin, setShowCheckin, registerBackHandler);
+  useOverlayBackHandler('timer-modal', showTimer, setShowTimer, registerBackHandler);
+  useOverlayBackHandler('quick-add-modal', showQuickAdd, setShowQuickAdd, registerBackHandler);
+  useOverlayBackHandler('qa-modal', showQA, setShowQA, registerBackHandler);
+
   const navigate = useCallback((pageId) => {
+    // 這幾個不是 page，是全域彈窗——攔截掉，不動 page 這個 state，
+    // 背景維持原本在看的那一頁，不會被換成空白或另一頁。
+    if (pageId === 'checkin') { setShowCheckin(true); return; }
+    if (pageId === 'timer')   { setShowTimer(true); return; }
+    if (pageId === 'quick')   { setShowQuickAdd(true); return; }
+    if (pageId === 'qa')      { setShowQA(true); return; }
+
     if (modeRef.current === 'basic' && pageId === 'main') return;
-    setPage(current => {
-      if (current === pageId) return current;
-      if (pageId === 'shop_gems') {
-        shopGemsOriginRef.current = current;
-      }
-      return pageId;
-    });
+    setPage(current => (current === pageId ? current : pageId));
   }, []);
 
   const goBack = useCallback(() => {
@@ -169,7 +170,6 @@ export default function GameLayout() {
     window.history.replaceState({ questoryDepth: 1 }, '');
   }, []);
 
-  // 維護「哨兵」history entry：離開 root 就推一筆，回到 root 就蓋掉
   useEffect(() => {
     const root = getRoot(mode);
     const isRoot = page === root;
@@ -182,26 +182,20 @@ export default function GameLayout() {
     }
   }, [page, mode]);
 
-  // Android 實體返回鍵在能 goBack() 時、iOS 邊緣滑動手勢，
-  // 都會消耗掉一筆 history entry，反映成這個 popstate 事件。
   useEffect(() => {
     const onPopState = () => {
       hasSentinelRef.current = false;
       if (consumeBack()) {
-        // 子畫面被攔截處理掉了，頁面本身沒有離開──
-        // 把剛剛被原生返回消耗掉的哨兵補回去，
-        // 這樣「再按一次」還能繼續往上一層跳
         window.history.pushState({ questorySentinel: true }, '');
         hasSentinelRef.current = true;
         return;
       }
-      setPage(current => getParent(current, modeRef.current, shopGemsOriginRef.current));
+      setPage(current => getParent(current, modeRef.current));
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, [consumeBack]);
 
-  // 只有已經在 root、退無可退時，才會真的收到這個事件
   useEffect(() => {
     const exitPromptRef = { current: 0 };
     let handle;
@@ -210,8 +204,7 @@ export default function GameLayout() {
       if (consumeBack()) return;
       const root = getRoot(modeRef.current);
       if (pageRef.current !== root) {
-        // 保險用：理論上不會走到這裡
-        setPage(current => getParent(current, modeRef.current, shopGemsOriginRef.current));
+        setPage(current => getParent(current, modeRef.current));
         return;
       }
       const now = Date.now();
@@ -227,26 +220,30 @@ export default function GameLayout() {
   }, [consumeBack]);
 
   const isFullscreen = FULLSCREEN_PAGES.includes(page);
+  const showHud = !isFullscreen && !NO_HUD_PAGES.includes(page);
+  const needsOwnTopSafeArea = !isFullscreen && NO_HUD_PAGES.includes(page);
   const canGoBack = page !== getRoot(mode);
+
   const fullscreenStyle =
     page === 'story'
       ? {
-        width: '100%',
-        height: '100%',
-        background: FULLSCREEN_BG.story,
-        overflow: 'hidden',
-        position: 'relative',
-      }
+          width: '100%',
+          height: '100%',
+          background: FULLSCREEN_BG.story,
+          overflow: 'hidden',
+          position: 'relative',
+        }
       : {
-        ...s.fullscreenSafeArea,
-        background: FULLSCREEN_BG[page] ?? 'var(--bg-panel, #f7e7ce)',
-      };
+          ...s.fullscreenSafeArea,
+          background: FULLSCREEN_BG[page] ?? 'var(--bg-panel, #f7e7ce)',
+        };
+
   return (
     <div style={s.frame}>
-      {!isFullscreen && (
+      {showHud && (
         <HUD
           onAvatarClick={() => navigate('stats')}
-          onGemClick={() => navigate('shop_gems')}
+          onGemClick={() => setShowGemShop(true)}
           onSettingsClick={() => navigate('settings')}
         />
       )}
@@ -261,13 +258,26 @@ export default function GameLayout() {
               onRegisterBack={registerBackHandler}
             />
           </div>
+        ) : needsOwnTopSafeArea ? (
+          <div style={s.noHudSafeArea}>
+            <PageRouter pageId={page} onNavigate={navigate} onBack={goBack} canGoBack={canGoBack} onRegisterBack={registerBackHandler} />
+          </div>
         ) : (
           <PageRouter pageId={page} onNavigate={navigate} onBack={goBack} canGoBack={canGoBack} onRegisterBack={registerBackHandler} />
         )}
       </div>
-      {/* shop_gems 只是 shop 的變體（直接開鑽石 Modal），底部導覽列仍要顯示「商店」為選中 */}
-      {!isFullscreen && <Navbar activePage={page === 'shop_gems' ? 'shop' : page} onNavigate={navigate} />}
-      {/* Toast 通知層，全域顯示 */}
+      {!isFullscreen && <Navbar activePage={page} onNavigate={navigate} />}
+
+      {showGemShop && <GemShopModal onClose={() => setShowGemShop(false)} />}
+      {showCheckin && <CheckinModal onClose={() => setShowCheckin(false)} />}
+      {showTimer && <TimerModal onClose={() => setShowTimer(false)} />}
+      {showQuickAdd && (
+        <TaskPage quickAddOnly initialOpenForm onDismiss={() => setShowQuickAdd(false)} />
+      )}
+      {showQA && (
+        <HelpModal onClose={() => setShowQA(false)} onNavigate={(target) => { setShowQA(false); navigate(target); }} />
+      )}
+
       <ToastManager />
     </div>
   );
@@ -295,6 +305,13 @@ const s = {
     boxSizing: 'border-box',
     paddingTop: 'env(safe-area-inset-top, 0px)',
     paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  noHudSafeArea: {
+    width: '100%', height: '100%',
+    boxSizing: 'border-box',
+    paddingTop: 'env(safe-area-inset-top, 0px)',
     overflow: 'hidden',
     position: 'relative',
   },

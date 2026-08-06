@@ -1,5 +1,5 @@
 /* src/engines/shop.js */
-import { getState, setState } from '@/core/state.js';
+import { getState, setState, calcMaxEnergy } from '@/core/state.js';
 import { EventBus, makeIdempotentInit } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
 import { GameConfig } from '@/data/data.js';
@@ -42,8 +42,11 @@ export const ShopEngine = {
     const unsubGrant = EventBus.on(Events.Shop.REQUEST_GRANT_ITEM, ({ id, qty }) => {
       this.grantItem(id, qty);
     });
+    const unsubDailyReset = EventBus.on(Events.System.DAILY_RESET, () => {
+      this.performDailyReset();
+    });
 
-    return [unsubBuy, unsubUse, unsubDiscard, unsubUpload, unsubDelete, unsubGrant];
+    return [unsubBuy, unsubUse, unsubDiscard, unsubUpload, unsubDelete, unsubGrant, unsubDailyReset];
   }),
 
   performDailyReset() {
@@ -148,6 +151,13 @@ export const ShopEngine = {
     if (!item) return { success: false, msg: '背包中找不到物品' };
     if (item.count < qty) return { success: false, msg: '物品數量不足' };
 
+    // 寵物類道具（玩具/蛋碎片/寵物蛋，id 前綴 PET_）在背包裡純粹唯讀展示，
+    // 實際效果交給 Pet 系統處理。UI（ShopPage）已經不會對寵物類道具呼叫
+    // 這個方法，這裡是防呆，避免之後有人誤用這條路徑導致道具被靜默消耗。
+    if (item.category === '寵物') {
+      return { success: false, msg: '寵物道具請至寵物頁面操作' };
+    }
+
     const baseVal = parseInt(item.val || 0);
     const totalVal = baseVal * qty;
     let msg = '已使用';
@@ -173,8 +183,7 @@ export const ShopEngine = {
     } else if (item.category === '其他' && id.includes('stamina')) {
       setState(store => {
         const story = store.story || { energy: 0 };
-        const maxEnergy = 30 + Math.floor((store.lv || 1) / 5) * 10;
-        return { story: { ...story, energy: Math.min(story.energy + totalVal, maxEnergy) } };
+        return { story: { ...story, energy: Math.min(story.energy + totalVal, calcMaxEnergy(store.lv || 1)) } };
       });
       msg = `⚡ 恢復了 ${totalVal} 點精力`;
       EventBus.emit(Events.Stats.UPDATED);
@@ -183,7 +192,7 @@ export const ShopEngine = {
     this.discardItem(id, qty);
     return { success: true, msg };
   },
-
+  
   discardItem(id, qty = 1) {
     setState(store => {
       const bag = (store.bag || [])
