@@ -12,9 +12,6 @@ import TaskPage from '@/task/pages/TaskPage.jsx';
 import StatsPage from '@/components/pages/StatsPage.jsx';
 import ShopPage from '@/components/pages/ShopPage.jsx';
 import SettingsPage from '@/components/pages/SettingsPage.jsx';
-import AvatarPage from '@/avatar/pages/AvatarPage.jsx';
-import GachaPage from '@/avatar/pages/GachaPage.jsx';
-import StoryPage from '@/story/pages/StoryPage.jsx';
 import CheckinModal from '@/components/pages/CheckinModal.jsx';
 import TimerModal from '@/components/pages/TimerModal.jsx';
 import ScannerModal from '@/components/pages/ScannerModal.jsx';
@@ -22,17 +19,12 @@ import ToastManager from '@/components/ui/ToastManager.jsx';
 import GemShopModal from '@/components/ui/GemShopModal.jsx';
 import HelpModal from '@/components/ui/HelpModal.jsx';
 
-const FULLSCREEN_PAGES = ['story', 'avatar'];
+const FULLSCREEN_PAGES = [];
 const NO_HUD_PAGES = ['shop'];
 
-const FULLSCREEN_BG = {
-  avatar: 'var(--bg-panel, #f7e7ce)',
-  story: 'var(--bg-hud, #2c1a0e)',
-};
+const FULLSCREEN_BG = {};
 
-const FIXED_PARENTS = {
-  gacha: 'avatar',
-};
+const FIXED_PARENTS = {};
 
 function getRoot(mode) {
   return mode === 'basic' ? 'stats' : 'main';
@@ -50,11 +42,7 @@ function PageRouter({ pageId, onNavigate, onBack, canGoBack, onRegisterBack }) {
     case 'stats':   return <StatsPage />;
     case 'shop':    return <ShopPage />;
     case 'settings':return <SettingsPage />;
-    case 'avatar':  return <AvatarPage onNavigate={onNavigate} onBack={onBack} canGoBack={canGoBack} />;
-    case 'story':   return <StoryPage onNavigate={onNavigate} onBack={onBack} canGoBack={canGoBack} />;
-    case 'gacha':   return <GachaPage />;
-    case 'scanner': return (
-      <ScannerModal
+    case 'scanner': return (      <ScannerModal
         onClose={onBack}
         onResult={({ name, kcal }) => {
           const timeStr = new Date().toTimeString().slice(0, 5);

@@ -1,8 +1,6 @@
 // src/components/pages/MainPage.jsx
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/core/state.js';
-import PetWidget from '@/pet/components/PetWidget.jsx';
-import CompanionWidget from '@/avatar/components/CompanionWidget.jsx';
 import { getQuickIcons } from '@/data/theme_config.js';
 import CharacterSprite from '@/components/ui/CharacterSprite.jsx';
 import { StageContext, getGridCellX, getGridCellY } from '@/components/ui/stage.js';
@@ -74,24 +72,13 @@ function DebugGridOverlay({ stage }) {
 }
 
 export default function MainPage({ onNavigate }) {
-  const { avatar, settings, challenge } = useGameStore(s => ({
+  const { avatar, settings } = useGameStore(s => ({
     avatar: s.avatar ?? {},
     settings: s.settings ?? {},
-    challenge: s.challenge ?? null,
   }));
 
   const isBasic = settings.mode === 'basic';
   const wearing = avatar?.wearing ?? {};
-
-  const handleAccept = useCallback(() => {
-    useGameStore.setState(s => ({
-      challenge: s.challenge ? { ...s.challenge, status: 'active', active: true } : null,
-    }));
-  }, []);
-
-  const handleDecline = useCallback(() => {
-    useGameStore.setState(() => ({ challenge: null }));
-  }, []);
 
   const quickIcons = getQuickIcons(settings.theme, isBasic);
   const quickIconsCountRef = useRef(quickIcons.length);
@@ -176,20 +163,6 @@ export default function MainPage({ onNavigate }) {
           />
         )}
 
-        {/* ⚠️ 陪伴者：格子位置(人物右邊一欄、同一排)已經想好，但
-            CompanionWidget.jsx 內部定位邏輯還沒看過，先維持原本呼叫
-            方式不變，等檔案給我再接上，不貿然傳入座標。 */}
-        <div style={{ position: 'absolute', inset: 0, zIndex: Z.BACKDROP, pointerEvents: 'none' }}>
-          <div style={{ pointerEvents: 'auto' }}>
-            <CompanionWidget
-              compId={wearing.companion}
-              challenge={challenge}
-              onAccept={handleAccept}
-              onDecline={handleDecline}
-            />
-          </div>
-        </div>
-
         <div
           style={{ position: 'absolute', left: charX, top: charY, transform: 'translate(-50%, -100%)', zIndex: Z.CHARACTER, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}
           onClick={() => onNavigate('stats')}
@@ -200,12 +173,7 @@ export default function MainPage({ onNavigate }) {
           <div style={styles.charShadow} />
         </div>
 
-        <div style={{ position: 'absolute', inset: 0, zIndex: Z.PET, pointerEvents: 'none' }}>
-          <PetWidget />
-        </div>
-
-        <div style={styles.quickBar}>
-          {quickIcons.map((item, i) => (
+        <div style={styles.quickBar}>          {quickIcons.map((item, i) => (
             <button
               key={i}
               style={styles.quickBtn}
@@ -216,13 +184,6 @@ export default function MainPage({ onNavigate }) {
           ))}
         </div>
 
-        {!isBasic && (
-          <div style={styles.storyBtnWrap}>
-            <button style={styles.storyBtn} onClick={() => onNavigate('story')}>
-              🌀 進入劇情模式
-            </button>
-          </div>
-        )}
       </StageContext.Provider>
     </div>
   );

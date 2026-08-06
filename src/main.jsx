@@ -5,24 +5,14 @@ import { useGameStore, applyOfflineEnergyRecovery } from '@/core/state.js';
 import { EventBus } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
 import App from '@/App.jsx';
-import { StoryBridge } from '@/story/engines/StoryBridge.js';
 import { StatsEngine } from '@/engines/stats.js';
-import { AchEngine } from '@/engines/ach.js';
 import { ShopEngine } from '@/engines/shop.js';
 import { CheckinEngine } from '@/engines/checkin.js';
 import { TaskEngine } from '@/task/engines/task.js';
-import { WidgetSyncEngine } from '@/engines/widgetSync.js';
 import { Audio } from '@/plugins/audio.js';
 import { Notification } from '@/plugins/notification.js';
-import { ChallengeEngine } from '@/engines/challenge.js';
 import { RewardEngine } from '@/engines/reward.js';
-import { PetEngine } from '@/pet/engines/pet.js';
-import { AvatarEngine } from '@/avatar/engines/avatar.js';
 import { SettingsEngine } from '@/engines/settings.js';
-import { narrativeEngine } from '@/story/engines/NarrativeEngine.js';
-import { ConvertedPool } from '@/story/data/converted_pool.js';
-import { PluginConfigs } from '@/story/data/plugin_configs.js';
-
 // 初始化 iOS 滑動返回插件
 IosSwipeBackPlugin.enable();
 
@@ -43,24 +33,13 @@ function Root() {
     // 2. 初始化各引擎（掛 EventBus listeners）
     //     必須在 checkDailyReset() 之前，避免 DAILY_RESET 在監聽掛上前就被觸發而漏接
     StatsEngine.init();
-    AchEngine.init();
     ShopEngine.init();
     CheckinEngine.init();
     TaskEngine.init();
-    WidgetSyncEngine.init();
-    StoryBridge.init();
     Audio.init();
     Notification.init();
-    ChallengeEngine.init();
     RewardEngine.init();
-    PetEngine.init();
-    AvatarEngine.init();
     SettingsEngine.init();
-
-    // TestPool（涵蓋 ConvertedPool 尚未轉換的家族）+ ConvertedPool（正式轉換內容）合併載入
-    narrativeEngine.loadPool(ConvertedPool);
-    narrativeEngine.loadPluginConfigs(PluginConfigs);
-
     // 3. 每日重置時同步觸發各引擎
     //    ⚠️ 修正：此監聽務必在 checkDailyReset() 之前註冊。
     //    checkDailyReset() 若判定跨日會「同步」emit DAILY_RESET，
@@ -73,9 +52,6 @@ function Root() {
 
     // 4. 每日重置檢查（更新 loginStreak / totalLoginDays，可能觸發 DAILY_RESET）
     checkDailyReset();
-
-    // 登入時嘗試發布陪伴者挑戰（延遲 5 秒，讓 UI 先穩定）
-    setTimeout(() => ChallengeEngine.tryIssueChallenge(), 5000);
 
     EventBus.emit(Events.System.INIT);
 
