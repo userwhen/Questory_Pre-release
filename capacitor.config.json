@@ -1,0 +1,11 @@
+{
+  "appId": "com.questory.app",
+  "appName": "Questory",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

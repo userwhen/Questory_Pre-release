@@ -1,0 +1,378 @@
+/* ==========================================================================
+   Levelife V10 — style.css V44.0 (Clean Architecture + Animations)
+   ========================================================================== */
+
+/* ====================== 1. 核心變數 (Core Variables) ====================== */
+:root {
+    --bg-frame:       #1a100c;
+    --bg-panel:       #f7e7ce;
+    --bg-input:       #ffffff;
+    --color-gold:     #f5a623;   
+    --color-danger:   #c0392b;   
+	/* 🌟 補齊：孤兒變數 Fallback */
+    --bg-track:           rgba(0,0,0,0.05);
+    --border-light:       rgba(0,0,0,0.05);
+    --color-warning:      #f39c12; /* 警告橘黃色 */
+    --color-purple:       #9b59b6; /* 擴充紫色 */
+    --shadow-md:          0 4px 12px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08);
+
+    /* 🌟 補齊：Navbar 預設變數 */
+    --nav-item-color:     rgba(255,255,255,0.28);
+    --nav-item-active:    var(--color-gold);
+    --nav-active-bar:     var(--color-gold);
+
+    --color-gold-dark:    #c47d0e;
+    --color-gold-soft:    #fef3c7;
+    --color-gold-glow:    rgba(245,166,35,0.28);
+    --color-correct:      #227A59;
+    --color-correct-dark: #185C42;   
+    --color-correct-soft: #d1fae5;
+    --color-danger-dark:  #922b21;   
+    --color-danger-soft:  #fee2e2;
+    --color-info:         #2980b9;
+    --color-info-soft:    #dbeafe;
+
+    --bg-hud:         #2c1a0e;   
+    --bg-nav:         #1e1208;   
+    --bg-card:        #ffffff;   
+    --bg-card-done:   #fef9ee;   
+    --bg-elevated:    #fdf0d8;   
+    --bg-modal:       #fdf5e6;
+    --bg-modal-head:  #3b2519;   
+    --bg-modal-foot:  #f0e4cc;   
+    --bg-box:         rgba(0,0,0,0.035);
+
+    --text:           #2c1a0e;   
+    --text-2:         #5c3d2e;   
+    --text-muted:     #8c6e52;   
+    --text-ghost:     #9C7B5B;   
+    --text-on-dark:   #f5e6cf;   
+
+    --border:         rgba(0,0,0,0.09);
+    --border-card:    rgba(0,0,0,0.07);
+    --border-input:   #d5c5a8;
+    --border-focus:   var(--color-gold);
+    --border-wood:    #3e2723;
+
+    --shadow-xs:    0 1px 2px rgba(0,0,0,0.07);
+    --shadow-sm:    0 2px 6px rgba(0,0,0,0.09), 0 1px 2px rgba(0,0,0,0.05);
+    --shadow:       0 4px 14px rgba(0,0,0,0.11), 0 2px 4px rgba(0,0,0,0.06);
+    --shadow-lg:    0 12px 36px rgba(0,0,0,0.20), 0 4px 8px rgba(0,0,0,0.08);
+    --shadow-inner: inset 0 1px 3px rgba(0,0,0,0.10);
+
+    --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1); 
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);       
+    --ease-out:    cubic-bezier(0, 0, 0.2, 1);
+    --t-fast:  0.12s;
+    --t-base:  0.22s;
+    --t-slow:  0.35s;
+
+    --hud-h:       88px;        
+    --nav-h:       68px;        
+    --radius-xs:   6px;
+    --radius-sm:   8px;
+    --radius-md:   12px;
+    --radius-lg:   18px;
+    --radius-full: 9999px;
+	/*場景物件層  z: 10~99   家具、人物、陪伴者、寵物實體
+	場景浮層    z: 80~120  寵物/陪伴者氣泡（在物件上，但在系統按鈕下）*/
+    --z-bg:    0;
+    --z-page:  100;
+    --z-nav:   1000;
+    --z-hud:   1000;
+    --z-layer: 1500;
+    --z-mask:  8000;
+    --z-modal: 9000;
+    --z-toast: 9999;
+
+    /* 📱 Safe Area 終極解決方案 */
+    --sat: env(safe-area-inset-top, 45px);    /* 🌟 加大頂部，讓鑽石區域往下降，更好按 */
+    --sab: env(safe-area-inset-bottom, 35px); /* 🌟 加大底部，避開手機原生導航條 */
+}
+
+/* ==========================================================================
+   2. 重置與框架 (Reset)
+   ========================================================================== */
+*, *::before, *::after {
+    box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none;
+    user-select: none; scrollbar-width: none; -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { display: none; }
+
+html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #121212 !important;
+    color: var(--text);
+    font-family: 'Noto Sans TC', 'PingFang TC', 'Heiti TC', sans-serif;
+    display: flex; justify-content: center; align-items: center;
+
+    /* 👇 請補上以下這四行「系統防護罩」 👇 */
+    
+    /* 1. 鎖死字體大小：無視手機系統的「放大字體」設定，避免 UI 撐爆 */
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+    
+    /* 2. 禁止邊緣回彈與下拉更新：防止玩家往下滑時觸發瀏覽器的重新整理 */
+    overscroll-behavior: none;
+    
+    /* 3. 禁止長按圖片跳出原生的「儲存圖片/拷貝」選單 */
+    -webkit-touch-callout: none;
+}
+#root {
+  width: 100%;
+  height: 100%;
+}
+h1, h2, h3, h4, h5, h6 { color: var(--text); margin: 0; }
+p, label, span, li { color: inherit; }
+
+input, textarea, select {
+    background: var(--bg-input);
+    color: var(--text);
+    border-color: var(--border-input);
+}
+input::placeholder, textarea::placeholder { color: var(--text-ghost); }
+
+#app-frame {
+    position: relative; width: 100%; height: 100%; max-width: 480px; margin: 0 auto;
+    background: var(--bg-panel); display: flex; flex-direction: column; overflow: hidden;
+    /* 🌟 修正：更換為乾淨柔和的陰影，去除原本骯髒的過度擴散 */
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 10px 40px rgba(0,0,0,0.5);
+}
+
+/* ==========================================================================
+   3. 全域結構 (Layout)
+   ========================================================================== */
+#hud { flex-shrink: 0; height: calc(var(--hud-h) + var(--sat)); padding-top: var(--sat); background: var(--bg-hud) !important; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; padding: 0 14px; z-index: var(--z-hud); position: relative; overflow: hidden; }
+#hud::before, #hud::after, #hud > .ga-deco-top { display: none !important; } /* 強制純色 */
+.hud-left { flex: 1; display: flex; align-items: center; gap: 11px; margin-right: 12px; min-width: 0; }
+.hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.hud-info { display: flex; flex-direction: column; justify-content: center; gap: 3px; width: 100%; }
+.hud-name { font-size: 0.92rem; font-weight: 700; color: var(--text-on-dark); letter-spacing: 0.02em; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.hud-lv-row { display: flex; align-items: center; gap: 7px; width: 100%; }
+.hud-lv-txt { font-size: 0.68rem; color: var(--color-gold); font-weight: 900; letter-spacing: 0.06em; background: rgba(245,166,35,0.15); border: 1px solid rgba(245,166,35,0.3); padding: 1px 7px; border-radius: var(--radius-full); flex-shrink: 0; }
+.hud-lv-row .u-progress { flex: 1; width: auto !important; height: 5px !important; border-radius: var(--radius-full) !important; background: rgba(255,255,255,0.12) !important; border: none !important; }
+.hud-lv-row .u-progress .u-progress-bar { background: linear-gradient(90deg, var(--color-gold-dark), var(--color-gold)) !important; border-radius: var(--radius-full) !important; }
+.hud-lv-row .u-progress .u-progress-text { display: none !important; }
+.u-avatar { width: 52px; height: 52px; border-radius: 12px; border: 2px solid var(--color-gold); box-shadow: 0 0 0 1px rgba(245,166,35,0.25), var(--shadow-sm); background: #3b2519; overflow: hidden; display: flex; justify-content: center; align-items: center; font-size: 26px; cursor: pointer; flex-shrink: 0; transition: transform var(--t-fast) var(--ease-bounce), box-shadow var(--t-base); }
+.u-avatar:active { transform: scale(0.90); box-shadow: 0 0 0 2px var(--color-gold); }
+.u-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+#navbar { flex-shrink: 0; height: calc(var(--nav-h) + var(--sab)); padding-bottom: var(--sab); background: var(--bg-nav); border-top: 1px solid rgba(0,0,0,0.05); display: flex; z-index: var(--z-nav); }
+.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: transparent; border: none; color: var(--nav-item-color, rgba(255,255,255,0.28)); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; padding: 0; margin: 0; cursor: pointer; transition: color var(--t-base) var(--ease-smooth), transform var(--t-base) var(--ease-bounce); position: relative; }
+.nav-item.active { color: var(--nav-item-active, var(--color-gold)); transform: translateY(-1px); }
+.nav-item.active::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 22px; height: 2px; background: var(--nav-active-bar, var(--color-gold)); border-radius: var(--radius-full) var(--radius-full) 0 0; box-shadow: 0 0 6px var(--color-gold-glow); }
+
+#content-area { flex: 1; position: relative; overflow: hidden; z-index: var(--z-page); background-color: var(--bg-panel); }
+#layer-full { position: absolute; top: 0; bottom: 0; left: 0; right: 0; z-index: var(--z-layer); opacity: 0; pointer-events: none; background-color: #000; transition: opacity var(--t-slow) var(--ease-smooth); overflow: hidden; }
+#layer-full.active { opacity: 1; pointer-events: auto; }
+
+/* 🌟 全螢幕與一般頁面的安全邊界保護 */
+.page { display: none; opacity: 0; transition: opacity var(--t-fast) var(--ease-out); width: 100%; height: 100%; overflow: hidden; }
+.page.active { display: block; opacity: 1; }
+
+/* 🌟 強制版面順序：無論 JS 怎麼載入，HUD 永遠在上，Navbar 永遠在底 */
+#app-frame { display: flex; flex-direction: column; height: 100%; }
+#hud { order: 1; flex-shrink: 0; }
+#content-area { order: 2; flex: 1; min-height: 0; }
+#navbar { order: 3; flex-shrink: 0; }
+
+/* 🌟 全螢幕頁面安全邊界：layer-full 從 content-area top:0 開始，內容需避開底部原生導航列 */
+#page-story, #page-avatar {
+    padding-top: 0 !important;
+    padding-bottom: var(--sab) !important;
+    box-sizing: border-box;
+}
+/* ==========================================================================
+   4. 通用元件庫 (UI Components)
+   ========================================================================== */
+.u-btn { border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 9px 18px; font-weight: 700; font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; background: var(--bg-card, #fff); color: var(--text); transition: transform var(--t-fast) var(--ease-bounce), box-shadow var(--t-fast), filter var(--t-base); flex-shrink: 0; letter-spacing: 0.02em; font-size: 0.9rem; white-space: nowrap; }
+.u-btn:active { transform: translateY(2px); filter: brightness(0.92); }
+.u-btn:disabled { background: #e8e0d5; color: var(--text-ghost); cursor: not-allowed; box-shadow: none !important; opacity: 0.6; }
+.u-btn-correct { background: var(--color-correct); color: #fff; border: none; box-shadow: 0 4px 0 var(--color-correct-dark), 0 2px 8px rgba(46,158,116,0.28); }
+.u-btn-correct:active { box-shadow: 0 1px 0 var(--color-correct-dark), 0 1px 3px rgba(46,158,116,0.12); }
+.u-btn-danger { background: var(--color-danger); color: #fff; border: none; box-shadow: 0 4px 0 var(--color-danger-dark), 0 2px 8px rgba(192,57,43,0.28); }
+.u-btn-danger:active { box-shadow: 0 1px 0 var(--color-danger-dark), 0 1px 3px rgba(192,57,43,0.12); }
+.u-btn-normal { background: var(--bg-card); border: 1.5px solid var(--border-input); color: var(--text-2); box-shadow: 0 2px 0 rgba(0,0,0,0.08), var(--shadow-xs); }
+.u-btn-ghost { background: transparent; border: 1.5px solid rgba(0,0,0,0.12); color: var(--text-muted); box-shadow: none; }
+.u-btn-sm { padding: 5px 12px; font-size: 0.8rem; border-radius: var(--radius-xs); }
+
+.u-box { background: var(--bg-box); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 13px; margin-bottom: 12px; width: 100%; color: var(--text); }
+.input-group { margin-bottom: 14px; width: 100%; }
+.section-title { display: block; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; }
+.inp { width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 0.95rem; transition: border-color var(--t-base), box-shadow var(--t-base); border: 1.5px solid var(--border-input); }
+.inp:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--color-gold-glow); outline: none; }
+
+.u-progress { position: relative; background: rgba(0,0,0,0.09); border-radius: var(--radius-full); overflow: hidden; width: 100%; height: 14px; box-shadow: var(--shadow-inner); }
+.u-progress-bar { height: 100%; background: linear-gradient(90deg, var(--color-correct) 0%, #4ac994 60%, #6ee7b7 100%); width: 0%; transition: width var(--t-slow) var(--ease-smooth); position: relative; }
+.u-progress-text { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; font-weight: 800; text-shadow: 0 1px 1px rgba(0,0,0,0.9); }
+
+.chk { width: 24px; height: 24px; border: 2px solid var(--border-input); border-radius: 50%; cursor: pointer; background: var(--bg-card); transition: all var(--t-base); position: relative; flex-shrink: 0; }
+.chk.checked { background: var(--color-correct); border-color: var(--color-correct); }
+.chk.checked::after { content: '✓'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 13px; font-weight: 900; }
+
+.task-card, .std-card { display: flex; flex-direction: column; background: var(--bg-card); border-radius: var(--radius-md); padding: 12px 13px 12px 17px; margin-bottom: 10px; box-shadow: var(--shadow-sm); border: 1px solid var(--border-card); border-left: 4px solid var(--border-input); cursor: pointer; color: var(--text); }
+.task-card.status-done { border-left-color: var(--color-gold); background: var(--bg-card-done); opacity: 0.82; }
+.task-main-row { display: flex; align-items: center; gap: 10px; width: 100%; }
+.task-content { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.task-title { font-weight: 700; font-size: 0.95rem; line-height: 1.3; }
+.task-card.status-done .task-title { color: var(--text-ghost); text-decoration: line-through; text-decoration-color: var(--text-ghost); }
+.u-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: var(--radius-xs); background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.14); font-size: 0.75rem; font-weight: 700; }
+
+.u-toggle-row { display: flex; align-items: center; gap: 12px; padding: 12px 13px; background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; margin-bottom: 8px; transition: 0.2s; }
+.u-toggle-row.on { border-color: rgba(46,158,116,0.4); background: var(--color-correct-soft); }
+.u-toggle-row .toggle-track { width: 38px; height: 22px; border-radius: var(--radius-full); background: var(--border-input); position: relative; transition: 0.2s; }
+.u-toggle-row.on .toggle-track { background: var(--color-correct); }
+.u-toggle-row .toggle-track::after { content: ''; position: absolute; width: 16px; height: 16px; background: #fff; border-radius: 50%; top: 3px; left: 3px; box-shadow: 0 1px 4px rgba(0,0,0,0.2); transition: transform 0.2s var(--ease-bounce); }
+.u-toggle-row.on .toggle-track::after { transform: translateX(16px); }
+.u-toggle-row .toggle-label { font-size: 0.9rem; font-weight: 600; color: var(--text-2); flex: 1; }
+
+.u-scroll-list { display: flex; overflow-x: auto; gap: 5px; padding-bottom: 5px; }
+
+/* ==========================================================================
+   5. 模組專屬樣式 (Modules)
+   ========================================================================== */
+.card-vertical { display: flex; flex-direction: column; align-items: center; background: var(--bg-card); border: 1px solid var(--border-card); border-radius: var(--radius-md); padding: 12px 10px; box-shadow: var(--shadow-sm); color: var(--text); }
+.avatar-card { background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius-md); transition: all var(--t-base); color: var(--text); }
+.avatar-card:hover { border-color: var(--color-gold); box-shadow: 0 0 0 2px var(--color-gold-glow); }
+
+#story-top-bar { position: relative; z-index: 10; flex-shrink: 0; background: rgba(0,0,0,0.92); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 8px 15px; display: flex; justify-content: space-between; align-items: center; backdrop-filter: blur(8px); }
+#story-text-box { position: relative; z-index: 10; flex: 1; width: 100%; padding: 20px 24px; color: #f0e6d3; font-size: 1.05rem; line-height: 1.75; overflow-y: auto; }
+#story-actions { position: relative; z-index: 10; flex-shrink: 0; width: 100%; padding: 14px; background: rgba(10,5,3,0.95); border-top: 1px solid rgba(255,255,255,0.07); display: grid; gap: 8px; max-height: 40%; overflow-y: auto; backdrop-filter: blur(8px); }
+/* ==========================================================================
+   6. 覆蓋層與視窗 (Overlays & Modals)
+   ========================================================================== */
+.mask { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); z-index: var(--z-mask); display: none; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+.mask.active { display: flex; }
+.modal { width: 92%; max-width: 400px; max-height: 88%; background: var(--bg-modal); border-radius: var(--radius-lg); border: 2px solid var(--border-wood); display: flex; flex-direction: column; z-index: var(--z-modal); overflow: hidden; animation: modal-in var(--t-slow) var(--ease-bounce); }
+@keyframes modal-in { from { opacity: 0; transform: scale(0.90) translateY(14px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+.m-head { flex-shrink: 0; background: var(--bg-modal-head); color: var(--text-on-dark); padding: 13px 16px; font-weight: 700; font-size: 1.0rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.m-body { flex: 1; overflow-y: auto; padding: 18px 16px; background: var(--bg-modal); }
+.m-foot { flex-shrink: 0; padding: 12px 14px; background: var(--bg-modal-foot); border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+.u-toast { position: fixed; left: 50%; bottom: calc(var(--nav-h) + 14px + var(--sab)); transform: translateX(-50%) translateY(8px); z-index: var(--z-toast); background: var(--bg-hud); color: var(--text-on-dark); padding: 10px 20px; border-radius: var(--radius-full); font-size: 0.88rem; font-weight: 600; pointer-events: none; opacity: 0; transition: opacity var(--t-base), transform var(--t-base) var(--ease-bounce); box-shadow: var(--shadow-lg); text-align: center; white-space: nowrap; }
+.u-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ==========================================================================
+   7. 掃描器與特效 (Scanner & Fx)
+   ========================================================================== */
+body.sq-scanner-active { background: transparent !important; }
+body.sq-scanner-active #app-frame, body.sq-scanner-active #page-shop, body.sq-scanner-active #content-area { background: transparent !important; box-shadow: none !important; }
+.sq-scanner-overlay { position: fixed; inset: 0; z-index: 99999; display: flex; flex-direction: column; background: transparent; pointer-events: none; }
+.sq-scanner-hole { width: 250px; height: 250px; margin: auto; position: relative; box-shadow: 0 0 0 9999px rgba(0,0,0,0.65); border-radius: 12px; }
+.sq-scanner-hole::before, .sq-scanner-hole::after, .sq-scanner-hole .corner-bl, .sq-scanner-hole .corner-br { content: ''; position: absolute; width: 30px; height: 30px; border-color: var(--color-gold); border-style: solid; }
+.sq-scanner-hole::before { top: 0; left: 0; border-width: 4px 0 0 4px; border-top-left-radius: 12px; }
+.sq-scanner-hole::after { top: 0; right: 0; border-width: 4px 4px 0 0; border-top-right-radius: 12px; }
+.sq-scanner-hole .corner-bl { bottom: 0; left: 0; border-width: 0 0 4px 4px; border-bottom-left-radius: 12px; }
+.sq-scanner-hole .corner-br { bottom: 0; right: 0; border-width: 0 4px 4px 0; border-bottom-right-radius: 12px; }
+.sq-scanner-ui { position: absolute; bottom: 80px; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 20px; pointer-events: auto; }
+
+#story-text-box.tension-mid { box-shadow: inset 0 0 20px rgba(180, 0, 0, 0.3) !important; border-color: rgba(200, 0, 0, 0.5) !important; transition: all 1s ease-in-out; }
+#story-text-box.tension-high { box-shadow: inset 0 0 40px rgba(220, 0, 0, 0.6) !important; border-color: rgba(255, 0, 0, 0.8) !important; background-color: rgba(50, 0, 0, 0.15) !important; animation: text-tremble 0.3s infinite alternate; }
+
+/* ==========================================================================
+   8. 動畫庫 (Animation Library) - Matter.js 最終整合版
+   ========================================================================== */
+
+/* ── [A] 系統 UI 與 彈出效果 ── */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pop-in { 0% { transform: scale(0.8) translateY(10px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
+@keyframes dot-urgent { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.3); } }
+
+/* ── [B] 物理輔助動畫 (Matter.js 同步使用) ── */
+@keyframes natural-breathe {
+    0%, 100% { transform: scale(1) translateY(0); }
+    50% { transform: scale(1.015, 1.01) translateY(-2px); }
+}
+
+/* 🌟 被呼叫的關鍵互動動畫 */
+@keyframes pet-jump {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-25px) scale(0.95, 1.05); }
+}
+@keyframes pet-eat {
+    0%, 100% { transform: scale(1) translateY(0); }
+    25% { transform: scale(1.1, 0.8) translateY(10px) rotate(-5deg); }
+    50% { transform: scale(0.95, 1.05) translateY(-5px) rotate(5deg); }
+    75% { transform: scale(1.1, 0.8) translateY(10px) rotate(-5deg); }
+}
+@keyframes pet-shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-5px); }
+    40%, 80% { transform: translateX(5px); }
+}
+@keyframes pet-flip { 0%, 49% { transform: scaleX(1); } 50%, 80% { transform: scaleX(-1); } 81%, 100% { transform: scaleX(1); } }
+/* 伸懶腰：微微下壓再輕微彈起，非常優雅 */
+@keyframes pet-stretch {
+    0%, 100% { transform: scale(1) translateY(0); }
+    40% { transform: scale(1.08, 0.92) translateY(3px); }
+    70% { transform: scale(0.96, 1.04) translateY(-4px); }
+}
+
+/* 翻滾：改成跳躍旋轉一圈，更像寵物開心時的空翻 */
+@keyframes pet-roll {
+    0% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-20px) rotate(180deg); }
+    100% { transform: translateY(0) rotate(360deg); }
+}
+
+/* 開心扭動：微小的左右搖擺，不再誇張縮放 */
+@keyframes pet-wiggle {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-6deg); }
+    75% { transform: rotate(6deg); }
+}
+@keyframes float-slow {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-6px); } /* 微微往上浮動 */
+    100% { transform: translateY(0px); }
+}
+@keyframes shadow-pulse {
+    0% { transform: scale(1); opacity: 0.35; }
+    50% { transform: scale(0.6); opacity: 0.15; } /* 當精靈浮到最高點，影子變小變淡 */
+    100% { transform: scale(1); opacity: 0.35; }
+}
+/* ── [C] 應用樣式 ── */
+.character-alive { animation: natural-breathe 4s ease-in-out infinite; transform-origin: bottom center; }
+.u-hover-scale { transition: transform 0.2s var(--ease-smooth); }
+.u-hover-scale:hover { transform: scale(1.3); }
+.is-selected {
+    outline: 3px dashed var(--color-gold);
+    outline-offset: 4px;
+}
+/* 確保 Matter.js 控制的 DOM 不會閃爍 */
+[id^="pet-container-"], #pet-mascot-baby {
+    will-change: transform, left, top;
+}
+/* 🌟 全域防反光、防長按反白、防圖片拖曳儲存 */
+* {
+    -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none;   /* Safari */
+    -khtml-user-select: none;    /* Konqueror HTML */
+    -moz-user-select: none;      /* Old versions of Firefox */
+    -ms-user-select: none;       /* Internet Explorer/Edge */
+    user-select: none;           /* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
+}
+
+/* 確保圖片不被當成檔案拖曳 */
+img {
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-drag: none;
+    pointer-events: none; /* 如果該圖片不需要點擊，可以直接讓點擊穿透 */
+}
+
+/* 例外：只有輸入框允許選取 */
+input, textarea {
+    -webkit-user-select: auto;
+    user-select: auto;
+}
+/* 🌟 拖曳時的專屬特效 */
+.is-dragging {
+    filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.9)) brightness(1.15) !important;
+    margin-top: -8px !important; /* 用 margin 代替 transform，避免覆蓋座標 */
+    transition: margin-top 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.2s !important;
+    z-index: 9999 !important; 
+}

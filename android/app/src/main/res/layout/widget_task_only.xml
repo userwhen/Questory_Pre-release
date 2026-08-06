@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/widget_empty_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📭 暫無任務"
+        android:textSize="13sp"
+        android:textColor="#999999"
+        android:gravity="center"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
+        android:visibility="gone" />
+
+    <LinearLayout android:id="@+id/task_row_0" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/widget_task_row_bg" android:layout_marginBottom="6dp">
+        <ImageView android:id="@+id/task_accent_0" android:layout_width="4dp" android:layout_height="32dp" android:background="#f5a623" android:contentDescription="@null" />
+        <ImageView android:id="@+id/task_check_0" android:layout_width="18dp" android:layout_height="18dp" android:layout_marginStart="8dp" android:src="@drawable/widget_check_off" android:contentDescription="@null" />
+        <TextView android:id="@+id/task_title_0" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:paddingTop="7dp" android:paddingBottom="7dp" android:textSize="15sp" android:textStyle="bold" android:textColor="#2C1A0E" android:singleLine="true" android:ellipsize="end" />
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/task_row_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/widget_task_row_bg" android:layout_marginBottom="6dp">
+        <ImageView android:id="@+id/task_accent_1" android:layout_width="4dp" android:layout_height="32dp" android:background="#f5a623" android:contentDescription="@null" />
+        <ImageView android:id="@+id/task_check_1" android:layout_width="18dp" android:layout_height="18dp" android:layout_marginStart="8dp" android:src="@drawable/widget_check_off" android:contentDescription="@null" />
+        <TextView android:id="@+id/task_title_1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:paddingTop="7dp" android:paddingBottom="7dp" android:textSize="15sp" android:textStyle="bold" android:textColor="#2C1A0E" android:singleLine="true" android:ellipsize="end" />
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/task_row_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/widget_task_row_bg" android:layout_marginBottom="6dp">
+        <ImageView android:id="@+id/task_accent_2" android:layout_width="4dp" android:layout_height="32dp" android:background="#f5a623" android:contentDescription="@null" />
+        <ImageView android:id="@+id/task_check_2" android:layout_width="18dp" android:layout_height="18dp" android:layout_marginStart="8dp" android:src="@drawable/widget_check_off" android:contentDescription="@null" />
+        <TextView android:id="@+id/task_title_2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:paddingTop="7dp" android:paddingBottom="7dp" android:textSize="15sp" android:textStyle="bold" android:textColor="#2C1A0E" android:singleLine="true" android:ellipsize="end" />
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/task_row_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/widget_task_row_bg" android:layout_marginBottom="6dp">
+        <ImageView android:id="@+id/task_accent_3" android:layout_width="4dp" android:layout_height="32dp" android:background="#f5a623" android:contentDescription="@null" />
+        <ImageView android:id="@+id/task_check_3" android:layout_width="18dp" android:layout_height="18dp" android:layout_marginStart="8dp" android:src="@drawable/widget_check_off" android:contentDescription="@null" />
+        <TextView android:id="@+id/task_title_3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:paddingTop="7dp" android:paddingBottom="7dp" android:textSize="15sp" android:textStyle="bold" android:textColor="#2C1A0E" android:singleLine="true" android:ellipsize="end" />
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/task_row_4" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/widget_task_row_bg" android:layout_marginBottom="6dp">
+        <ImageView android:id="@+id/task_accent_4" android:layout_width="4dp" android:layout_height="32dp" android:background="#f5a623" android:contentDescription="@null" />
+        <ImageView android:id="@+id/task_check_4" android:layout_width="18dp" android:layout_height="18dp" android:layout_marginStart="8dp" android:src="@drawable/widget_check_off" android:contentDescription="@null" />
+        <TextView android:id="@+id/task_title_4" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:paddingTop="7dp" android:paddingBottom="7dp" android:textSize="15sp" android:textStyle="bold" android:textColor="#2C1A0E" android:singleLine="true" android:ellipsize="end" />
+    </LinearLayout>
+
+</LinearLayout>

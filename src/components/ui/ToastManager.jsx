@@ -1,0 +1,105 @@
+// src/components/ui/ToastManager.jsx
+// 監聽 Events.System.TOAST 並在畫面上顯示通知
+import React, { useState, useEffect, useRef } from 'react';
+import { EventBus } from '@/core/events.js';
+import { Events } from '@/core/event_types.js';
+
+const toastAnim = `
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(-50%) translateY(0)   scale(1); }
+  to   { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.95); }
+}
+`;
+
+let _toastId = 0;
+
+export default function ToastManager() {
+  const [toasts, setToasts] = useState([]);
+  const timers = useRef({});
+
+  useEffect(() => {
+    const unsub = EventBus.on(Events.System.TOAST, (msg) => {
+      if (!msg) return;
+      const id = ++_toastId;
+
+      setToasts(prev => {
+        // 最多同時顯示 3 條，超過則移除最舊的
+        const next = prev.length >= 3 ? prev.slice(1) : prev;
+        return [...next, { id, msg, exiting: false }];
+      });
+
+      // 3 秒後開始退場動畫
+      timers.current[id] = setTimeout(() => {
+        setToasts(prev => prev.map(t => t.id === id ? { ...t, exiting: true } : t));
+        // 再 0.3 秒後移除
+        timers.current[`${id}_rm`] = setTimeout(() => {
+          setToasts(prev => prev.filter(t => t.id !== id));
+          delete timers.current[id];
+          delete timers.current[`${id}_rm`];
+        }, 300);
+      }, 3000);
+    });
+
+    return () => {
+      unsub();
+      Object.values(timers.current).forEach(clearTimeout);
+    };
+  }, []);
+
+  if (toasts.length === 0) return null;
+
+  return (
+    <>
+      <style>{toastAnim}</style>
+      <div style={containerStyle}>
+        {toasts.map((t, i) => (
+          <div
+            key={t.id}
+            style={{
+              ...toastStyle,
+              animation: t.exiting
+                ? 'toastOut 0.3s ease forwards'
+                : 'toastIn 0.25s cubic-bezier(0.34,1.56,0.64,1) forwards',
+              bottom: 90 + i * 52,
+            }}
+          >
+            {t.msg}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+const containerStyle = {
+  position: 'fixed',
+  left: '50%',
+  bottom: 0,
+  zIndex: 99999,
+  pointerEvents: 'none',
+  width: 0, // 讓每個 toast 自己用 transform: translateX(-50%)
+};
+
+const toastStyle = {
+  position: 'absolute',
+  left: 0,
+  transform: 'translateX(-50%)',
+  whiteSpace: 'nowrap',
+  maxWidth: 320,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  background: 'rgba(44, 26, 14, 0.92)',
+  color: 'var(--text-on-dark, #f5e6cf)',
+  padding: '9px 18px',
+  borderRadius: 50,
+  fontSize: '0.88rem',
+  fontWeight: 600,
+  boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+  border: '1px solid rgba(245,166,35,0.25)',
+  backdropFilter: 'blur(6px)',
+  fontFamily: 'inherit',
+};
