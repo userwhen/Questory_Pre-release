@@ -3,15 +3,14 @@ import React, { useState, useMemo, useRef } from 'react';
 import { EventBus } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
 import { TaskDict, REMINDER_MODES } from '@/task/data/taskdict.js';
-import LocationPickerModal from '@/task/components/LocationPickerModal.jsx';
-import Modal from '@/components/ui/Modal.jsx';
+import Modal from '@/ui/Modal.jsx';
 import { useGameStore, LOCKED_TASK_CATS, FALLBACK_TASK_CAT } from '@/core/state.js';
 import {
   labelStyle, inputStyle,
   btnStyle, btnSmallStyle, boxStyle,
 } from '@/task/components/TaskStyles.js';
-import { getRewardWeight, getRewardRange } from '@/utils/rewardCurve.js';
-
+import { getRewardWeight, getRewardRange } from '@/reward/utils/rewardCurve.js';
+import { btnGhostStyle } from '@/styles/modalStyles.js';
 // 每個分類預設顯示哪些欄位（其餘收進「展開進階戰術設定」）
 const CATEGORY_VISIBLE_FIELDS = {
   gather: ['desc', 'subs'],
@@ -64,18 +63,21 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
 
   const visibleFields = CATEGORY_VISIBLE_FIELDS[qc] || CATEGORY_VISIBLE_FIELDS.guild;
   const hasAdvancedFields = ADVANCED_TOGGLABLE_FIELDS.some(f => !visibleFields.includes(f));
-  const showDescAbove = visibleFields.includes('desc');
-  const showSubsAbove = visibleFields.includes('subs');
+  // 編輯模式下，只要該欄位當初有填內容，即使模板沒把它排進預設露出欄位，也直接算「該露出」，
+  // 不用玩家再點一次「展開進階設定」。matrix 沒有真正的「空」狀態（永遠有預設值 2/2），不適用這條規則，維持只看模板。
+  const showDescAbove = visibleFields.includes('desc') || (isEdit && !!initial?.desc?.trim());
+  const showSubsAbove = visibleFields.includes('subs') || (isEdit && initial?.subs?.length > 0);
   const showMatrixAbove = visibleFields.includes('matrix');
   const showRecurrenceAbove = visibleFields.includes('recurrence');
   const showDeadlineAbove = visibleFields.includes('deadline');
-  const showLocationAbove = visibleFields.includes('location');
-  const showSkillsAbove = visibleFields.includes('skills');
-  // 起始日/循環/截止日合併成一塊，兩者任一該露出，整塊就露出
-  const showTimeSettingsAbove = showRecurrenceAbove || showDeadlineAbove;
+  const showLocationAbove = visibleFields.includes('location') || (isEdit && !!initial?.location?.trim());
+  const showSkillsAbove = visibleFields.includes('skills') || (isEdit && initial?.attrs?.length > 0);
+  // 起始日/循環/截止日合併成一塊，兩者任一該露出（含編輯時任一有內容），整塊就露出
+  const showTimeSettingsAbove = showRecurrenceAbove || showDeadlineAbove || (isEdit && (!!initial?.recurrence || !!initial?.deadline));
+  // achLink 本來就沒有模板露出的版本，純粹編輯時「當初有連結」才露出，沒連結一樣待在「展開進階設定」裡
+  const showAchLinkAbove = isEdit && !!initial?.achLink;
 
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [draggedSubIdx, setDraggedSubIdx] = useState(null);
   const [subDraft, setSubDraft] = useState('');
   const [renamingCat, setRenamingCat] = useState(null);
@@ -185,26 +187,30 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
 
   const handleSave = () => {
     if (!form.title.trim()) { EventBus.emit(Events.System.TOAST, '⚠️ 請輸入任務名稱'); return; }
+    // 子任務草稿框裡如果還留著沒按＋的文字，送出時直接一併存成子任務，不強迫玩家一定要按＋
+    const finalSubs = subDraft.trim()
+      ? [...form.subs, { text: subDraft.trim(), done: false }]
+      : form.subs;
     const narrativeText = form.narrativeMode && qDict.descTemplate
-      ? qDict.descTemplate({ title: form.title, desc: form.desc, subs: form.subs, target: form.target, location: form.location })
+      ? qDict.descTemplate({ title: form.title, desc: form.desc, subs: finalSubs, target: form.target, location: form.location })
       : null;
-    onSave({ ...form, narrativeText });
+    onSave({ ...form, subs: finalSubs, narrativeText });
     onClose();
   };
 
   const DescBlock = (
     <>
       <label style={labelStyle}>{qDict.descLabel}</label>
-      <textarea style={{ ...inputStyle, resize: 'none', minHeight: 60 }} placeholder={qDict.descPlaceholder} value={form.desc} onChange={e => set('desc', e.target.value)} />
+      <textarea style={{ ...inputStyle, resize: 'none', minHeight: 'var(--size-lg)' }} placeholder={qDict.descPlaceholder} value={form.desc} onChange={e => set('desc', e.target.value)} />
     </>
   );
 
   const SkillsBlock = (
     <>
       <label style={labelStyle}>{dDict.skillsLabel}</label>
-      <div style={{ ...boxStyle, display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 15 }}>
+      <div style={{ ...boxStyle, display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)', marginBottom: 'var(--space-md)' }}>
         {skills.length === 0
-          ? <span style={{ color: 'var(--text-ghost)', fontSize: '0.8rem' }}>{dDict.noSkills}</span>
+          ? <span style={{ color: 'var(--text-ghost)', fontSize: 'var(--font-body)' }}>{dDict.noSkills}</span>
           : skills.map(s => {
             const active = form.attrs?.includes(s.name);
             return (
@@ -222,35 +228,35 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
   );
 
   const CaloriesBlock = (unlocks.feature_cal && form.cat === '運動') ? (
-    <div style={{ ...boxStyle, background: 'var(--color-gold-soft)', borderColor: 'var(--color-gold)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+    <div style={{ ...boxStyle, background: 'var(--color-gold-soft)', borderColor: 'var(--color-gold)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-md)' }}>
       <span style={{ fontWeight: 'bold', color: 'var(--color-gold-dark)' }}>{dDict.caloriesLabel}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <input type="number" maxLength={4} style={{ ...inputStyle, width: 70, marginBottom: 0, padding: 6, border: 'none', background: 'rgba(255,255,255,0.7)' }} value={form.calories} onChange={e => set('calories', Math.min(9999, parseInt(e.target.value.slice(0, 4)) || 0))} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
+        <input type="number" maxLength={4} style={{ ...inputStyle, width: 'var(--size-lg)', marginBottom: 0, padding: 'var(--space-xs)', border: 'none', background: 'rgba(255,255,255,0.7)' }} value={form.calories} onChange={e => set('calories', Math.min(9999, parseInt(e.target.value.slice(0, 4)) || 0))} />
         <span style={{ fontWeight: 'bold', color: 'var(--color-gold-dark)' }}>Kcal</span>
       </div>
     </div>
   ) : null;
 
   const MatrixBlock = (
-    <div style={{ ...boxStyle, marginBottom: 15 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+    <div style={{ ...boxStyle, marginBottom: 'var(--space-md)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-xs)' }}>
         <span style={{ ...labelStyle, marginBottom: 0 }}>{dDict.matrixLabel}</span>
-        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>💰{estimatedRewards.min}~{estimatedRewards.max} ✨{estimatedRewards.min}~{estimatedRewards.max}</span>
+        <span style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted)' }}>💰{estimatedRewards.min}~{estimatedRewards.max} ✨{estimatedRewards.min}~{estimatedRewards.max}</span>
       </div>
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}><span>{dDict.importance}</span><b>{form.importance}</b></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--font-body)' }}><span>{dDict.importance}</span><b>{form.importance}</b></div>
         <input type="range" min="1" max="4" style={{ width: '100%' }} value={form.importance} onChange={e => set('importance', parseInt(e.target.value))} />
       </div>
-      <div style={{ marginTop: 10 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}><span>{dDict.urgency}</span><b>{form.urgency}</b></div>
+      <div style={{ marginTop: 'var(--space-xs)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--font-body)' }}><span>{dDict.urgency}</span><b>{form.urgency}</b></div>
         <input type="range" min="1" max="4" style={{ width: '100%' }} value={form.urgency} onChange={e => set('urgency', parseInt(e.target.value))} />
       </div>
     </div>
   );
   const AchLinkBlock = (
-    <div style={{ ...boxStyle, marginBottom: 15 }}>
+    <div style={{ ...boxStyle, marginBottom: 'var(--space-md)' }}>
       <label style={labelStyle}>🏅 成就歸屬</label>
-      <div style={{ display: 'flex', gap: 6, marginBottom: form.achLink ? 10 : 0 }}>
+      <div style={{ display: 'flex', gap: 'var(--space-xs)', marginBottom: form.achLink ? 10 : 0 }}>
         {[{ key: null, label: '不指定' }, { key: 'new', label: '建立新成就' }, { key: 'join', label: '加入既有成就' }].map(opt => (
           <button key={String(opt.key)}
             style={{ ...btnSmallStyle, flex: 1, background: (form.achLink?.mode ?? null) === opt.key ? 'var(--color-correct)' : 'var(--bg-card)', color: (form.achLink?.mode ?? null) === opt.key ? '#fff' : 'inherit' }}
@@ -267,7 +273,7 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
       )}
       {form.achLink?.mode === 'join' && (
         openAchievements.length === 0
-          ? <div style={{ fontSize: '0.8rem', color: 'var(--text-ghost)' }}>目前沒有可加入的成就，先用「建立新成就」開一個</div>
+          ? <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-ghost)' }}>目前沒有可加入的成就，先用「建立新成就」開一個</div>
           : <select style={inputStyle} value={form.achLink.achievementId} onChange={e => set('achLink', { ...form.achLink, achievementId: e.target.value })}>
             {openAchievements.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
           </select>
@@ -276,18 +282,18 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
   );
 
   const SubtasksBlock = (
-    <div style={{ ...boxStyle, marginBottom: 15 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+    <div style={{ ...boxStyle, marginBottom: 'var(--space-md)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xs)' }}>
         <label style={{ ...labelStyle, marginBottom: 0 }}>🔨 {qDict.subtasksLabel || dDict.addSubtask}</label>
-        <button style={{ ...btnSmallStyle, padding: '3px 10px', fontSize: '0.7rem', background: 'var(--color-warning)', color: '#fff', border: 'none' }}
+        <button style={{ ...btnSmallStyle, padding: '3px 10px', fontSize: 'var(--font-caption)', background: 'var(--color-warning)', color: '#fff', border: 'none' }}
           onClick={() => set('subRule', form.subRule === 'all' ? 'any' : 'all')}>
           {form.subRule === 'all' ? dDict.ruleAll : dDict.ruleAny}
         </button>
       </div>
       {form.subs.map((s, i) => (
         <div key={i} data-sub-idx={i}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6, opacity: draggedSubIdx === i ? 0.4 : 1 }}>
-          <input style={{ ...inputStyle, flex: 1, marginBottom: 0, padding: '4px 8px' }} value={s.text}
+          style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', marginBottom: 'var(--space-xs)', opacity: draggedSubIdx === i ? 0.4 : 1 }}>
+          <input style={{ ...inputStyle, flex: 1, marginBottom: 0, padding: 'var(--space-xs) var(--space-xs)' }} value={s.text}
             maxLength={10}
             onChange={e => { const ns = [...form.subs]; ns[i] = { ...ns[i], text: e.target.value }; set('subs', ns); }}
             placeholder={`步驟 ${i + 1}`} />
@@ -304,11 +310,11 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
             }}
             onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); setDraggedSubIdx(null); }}
             onPointerCancel={() => setDraggedSubIdx(null)}
-            style={{ cursor: 'grab', color: 'var(--text-ghost)', fontSize: '1rem', lineHeight: 1, flexShrink: 0, touchAction: 'none' }}>☰</span>
+            style={{ cursor: 'grab', color: 'var(--text-ghost)', fontSize: 'var(--font-title)', lineHeight: 1, flexShrink: 0, touchAction: 'none' }}>☰</span>
         </div>
       ))}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <input style={{ ...inputStyle, flex: 1, marginBottom: 0, padding: '4px 8px', border: '1px dashed var(--border)' }}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
+        <input style={{ ...inputStyle, flex: 1, marginBottom: 0, padding: 'var(--space-xs) var(--space-xs)', border: '1px dashed var(--border)' }}
           value={subDraft}
           maxLength={10}
           onChange={e => setSubDraft(e.target.value)}
@@ -333,10 +339,10 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
             background: 'var(--color-correct)',
             color: '#fff',
             border: 'none',
-            borderRadius: 4,
-            width: 40,
-            padding: '4px 0',
-            fontSize: '1.2rem',
+            borderRadius: 'var(--radius-xs)',
+            width: 'var(--size-sm)',
+            padding: 'var(--space-xs) 0',
+            fontSize: 'var(--font-title)',
             lineHeight: 1,
             cursor: 'pointer',
             flexShrink: 0,
@@ -354,7 +360,7 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
   const NUM_INPUT_WIDTH = 90;
 
   const CountBlock = (
-    <div style={{ ...boxStyle, marginBottom: 15 }}>
+    <div style={{ ...boxStyle, marginBottom: 'var(--space-md)' }}>
       <label style={labelStyle}>{dDict.targetLabel || '目標次數'}</label>
       <input
         type="text"
@@ -379,7 +385,7 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
     : null;
 
   const TimeSettingsBlock = (
-    <div style={{ ...boxStyle, marginBottom: 15 }}>
+    <div style={{ ...boxStyle, marginBottom: 'var(--space-md)' }}>
       <label style={labelStyle}>起始日</label>
       <input
         type="date"
@@ -389,14 +395,14 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
       />
       {form.startDate && (
         <button
-          style={{ ...btnSmallStyle, marginTop: 6, marginBottom: 4, background: form.notifyOnStart ? 'var(--color-correct)' : 'var(--bg-card)', color: form.notifyOnStart ? '#fff' : 'inherit' }}
+          style={{ ...btnSmallStyle, marginTop: 'var(--space-xs)', marginBottom: 'var(--space-xs)', background: form.notifyOnStart ? 'var(--color-correct)' : 'var(--bg-card)', color: form.notifyOnStart ? '#fff' : 'inherit' }}
           onClick={() => set('notifyOnStart', !form.notifyOnStart)}
         >
           {form.notifyOnStart ? '🔔 開始日會提醒我' : '🔕 開始日不提醒'}
         </button>
       )}
 
-      <label style={{ ...labelStyle, marginTop: 10 }}>{dDict.recurrenceLabel}</label>
+      <label style={{ ...labelStyle, marginTop: 'var(--space-xs)' }}>{dDict.recurrenceLabel}</label>
       <select
         style={inputStyle}
         value={activePresetKey}
@@ -419,8 +425,8 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
       </select>
 
       {activePresetKey === 'custom' && form.recurrence && (
-        <div style={{ padding: 12, background: 'rgba(0,0,0,0.03)', borderRadius: 8, marginBottom: 15, marginTop: -5, animation: 'fadeIn 0.2s' }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ padding: 'var(--space-sm)', background: 'rgba(0,0,0,0.03)', borderRadius: 'var(--radius-sm)', marginBottom: 'var(--space-md)', marginTop: -5, animation: 'fadeIn 0.2s' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-xs)', alignItems: 'center' }}>
             <span style={{ color: 'var(--text-muted)' }}>每</span>
             <input
               type="text"
@@ -448,7 +454,7 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
           </div>
 
           {form.recurrence.unit === 'week' && (
-            <div style={{ display: 'flex', gap: 4, marginTop: 12 }}>
+            <div style={{ display: 'flex', gap: 'var(--space-xs)', marginTop: 'var(--space-sm)' }}>
               {WEEKDAY_LABELS.map((label, idx) => {
                 const active = (form.recurrence.days || []).includes(idx);
                 return (
@@ -457,7 +463,7 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
                     style={{
                       ...btnSmallStyle,
                       flex: 1,
-                      padding: '6px 0',
+                      padding: 'var(--space-xs) 0',
                       background: active ? 'var(--color-correct)' : 'var(--bg-card)',
                       color: active ? '#fff' : 'inherit',
                       border: active ? 'none' : '1px solid var(--border)',
@@ -476,7 +482,7 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
           )}
 
           {nextOccurrenceLabel && (
-            <div style={{ marginTop: 10, fontSize: '0.75rem', color: 'var(--text-ghost)' }}>{nextOccurrenceLabel}</div>
+            <div style={{ marginTop: 'var(--space-xs)', fontSize: 'var(--font-caption)', color: 'var(--text-ghost)' }}>{nextOccurrenceLabel}</div>
           )}
         </div>
       )}
@@ -492,9 +498,9 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
   );
 
   const ReminderBlock = form.deadline ? (
-    <div style={{ ...boxStyle, marginBottom: 15 }}>
-      <label style={{ ...labelStyle, marginBottom: 8 }}>{dDict.reminderLabel}</label>
-      <div style={{ display: 'flex', gap: 6 }}>
+    <div style={{ ...boxStyle, marginBottom: 'var(--space-md)' }}>
+      <label style={{ ...labelStyle, marginBottom: 'var(--space-xs)' }}>{dDict.reminderLabel}</label>
+      <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
         {REMINDER_MODES.map(m => (
           <button key={m.key}
             style={{ ...btnSmallStyle, flex: 1, background: form.reminderMode === m.key ? 'var(--color-correct)' : 'var(--bg-card)', color: form.reminderMode === m.key ? '#fff' : 'inherit' }}
@@ -505,15 +511,14 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
   ) : null;
 
   const LocationBlock = (
-    <div style={{ ...boxStyle, marginBottom: 15, display: 'flex', gap: 6 }}>
+    <div style={{ ...boxStyle, marginBottom: 'var(--space-md)' }}>
       <input
-        style={{ ...inputStyle, flex: 1, marginBottom: 0 }}
+        style={{ ...inputStyle, marginBottom: 0 }}
         maxLength={10}
-        placeholder="輸入地點，或用地圖選擇"
+        placeholder="輸入地點"
         value={form.location}
         onChange={e => set('location', e.target.value)}
       />
-      <button style={{ ...btnSmallStyle, flexShrink: 0 }} onClick={() => setShowLocationPicker(true)}>📍 地圖</button>
     </div>
   );
 
@@ -539,36 +544,36 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
         </>
       )}
     >
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-xs)', alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
           <label style={labelStyle}>{qDict.inputLabel}</label>
           <input style={inputStyle} maxLength={10} placeholder="要做什麼呢？" value={form.title} onChange={e => set('title', e.target.value)} />
         </div>
-        <div style={{ paddingTop: 20, display: 'flex', gap: 4 }}>
-          <button style={{ ...btnSmallStyle, fontSize: '0.75rem', padding: '6px 8px', border: 'none', background: form.narrativeMode ? 'var(--color-correct)' : 'transparent', color: form.narrativeMode ? '#fff' : 'inherit', opacity: form.narrativeMode ? 1 : 0.5 }}
+        <div style={{ paddingTop: 'var(--space-lg)', display: 'flex', gap: 'var(--space-xs)' }}>
+          <button style={{ ...btnSmallStyle, fontSize: 'var(--font-caption)', padding: 'var(--space-xs) var(--space-xs)', border: 'none', background: form.narrativeMode ? 'var(--color-correct)' : 'transparent', color: form.narrativeMode ? '#fff' : 'inherit', opacity: form.narrativeMode ? 1 : 0.5 }}
             onClick={() => set('narrativeMode', !form.narrativeMode)}>🎭</button>
-          <button style={{ ...btnSmallStyle, fontSize: '1.2rem', padding: '6px 8px', border: 'none', background: 'transparent', opacity: form.pinned ? 1 : 0.3 }} onClick={() => set('pinned', !form.pinned)}>📌</button>
+          <button style={{ ...btnGhostStyle, border: 'none', fontSize: 'var(--font-title)', padding: 'var(--space-xs) var(--space-xs)', opacity: form.pinned ? 1 : 0.3 }} onClick={() => set('pinned', !form.pinned)}>📌</button>
         </div>
       </div>
 
       {showDescAbove && DescBlock}
 
-      <div style={{ ...boxStyle, marginBottom: 15 }}>
-        <label style={labelStyle}>{dDict.catLabel} <span style={{ fontSize: '0.7rem', color: 'var(--text-ghost)', fontWeight: 'normal' }}>{dDict.catHint}</span></label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      <div style={{ ...boxStyle, marginBottom: 'var(--space-md)' }}>
+        <label style={labelStyle}>{dDict.catLabel} <span style={{ fontSize: 'var(--font-caption)', color: 'var(--text-ghost)', fontWeight: 'normal' }}>{dDict.catHint}</span></label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)' }}>
           {cats.map(c => (
             renamingCat === c ? (
-              <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
                 <input
                   autoFocus
-                  style={{ ...inputStyle, width: 90, marginBottom: 0, padding: '4px 8px' }}
+                  style={{ ...inputStyle, width: 'var(--size-xl)', marginBottom: 0, padding: 'var(--space-xs) var(--space-xs)' }}
                   maxLength={10}
                   value={renameDraft}
                   onChange={e => setRenameDraft(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') submitRenameCat(); if (e.key === 'Escape') setRenamingCat(null); }}
                 />
-                <button style={{ ...btnSmallStyle, padding: '4px 8px' }} onClick={submitRenameCat}>✓</button>
-                <button style={{ ...btnSmallStyle, padding: '4px 8px', color: 'var(--color-danger)' }} onClick={submitDeleteCat}>🗑</button>
+                <button style={{ ...btnSmallStyle, padding: 'var(--space-xs) var(--space-xs)' }} onClick={submitRenameCat}>✓</button>
+                <button style={{ ...btnSmallStyle, padding: 'var(--space-xs) var(--space-xs)', color: 'var(--color-danger)' }} onClick={submitDeleteCat}>🗑</button>
               </div>
             ) : (
               <button key={c}
@@ -582,20 +587,20 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
             )
           ))}
           {addingCat ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
               <input
                 autoFocus
-                style={{ ...inputStyle, width: 90, marginBottom: 0, padding: '4px 8px' }}
+                style={{ ...inputStyle, width: 'var(--size-xl)', marginBottom: 0, padding: 'var(--space-xs) var(--space-xs)' }}
                 maxLength={10}
                 value={addDraft}
                 onChange={e => setAddDraft(e.target.value)}
                 placeholder="新分類"
                 onKeyDown={e => { if (e.key === 'Enter') submitAddCat(); if (e.key === 'Escape') setAddingCat(false); }}
               />
-              <button style={{ ...btnSmallStyle, padding: '4px 8px' }} onClick={submitAddCat}>✓</button>
+              <button style={{ ...btnSmallStyle, padding: 'var(--space-xs) var(--space-xs)' }} onClick={submitAddCat}>✓</button>
             </div>
           ) : (
-            <button style={{ ...btnSmallStyle, padding: '4px 10px', opacity: 0.7 }}
+            <button style={{ ...btnSmallStyle, padding: 'var(--space-xs) var(--space-xs)', opacity: 0.7 }}
               onClick={() => { setAddingCat(true); setAddDraft(''); }}>＋</button>
           )}
         </div>
@@ -608,10 +613,11 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
       {showTimeSettingsAbove && ReminderBlock}
       {showSkillsAbove && SkillsBlock}
       {showMatrixAbove && MatrixBlock}
+      {showAchLinkAbove && AchLinkBlock}
 
       {hasAdvancedFields && (
         <div onClick={() => setShowAdvanced(!showAdvanced)}
-          style={{ textAlign: 'center', padding: 12, marginBottom: 15, background: 'var(--bg-box)', borderRadius: 12, color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}>
+          style={{ textAlign: 'center', padding: 'var(--space-sm)', marginBottom: 'var(--space-md)', background: 'var(--bg-box)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)', fontSize: 'var(--font-body)', fontWeight: 'bold', cursor: 'pointer' }}>
           {showAdvanced ? dDict.advClose : dDict.advOpen}
         </div>
       )}
@@ -626,16 +632,8 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
           {!showTimeSettingsAbove && ReminderBlock}
           {!showSkillsAbove && SkillsBlock}
           {!showMatrixAbove && MatrixBlock}
-          {AchLinkBlock}
+          {!showAchLinkAbove && AchLinkBlock}
         </div>
-      )}
-
-      {showLocationPicker && (
-        <LocationPickerModal
-          initialLocation={form.location}
-          onConfirm={(loc) => { set('location', loc); setShowLocationPicker(false); }}
-          onClose={() => setShowLocationPicker(false)}
-        />
       )}
 
       {pendingCatDelete && (
@@ -651,7 +649,7 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
             </>
           }
         >
-          <p style={{ fontSize: '0.9rem', color: 'var(--text-2)', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 'var(--font-body)', color: 'var(--text-2)', lineHeight: 1.6 }}>
             刪除「{pendingCatDelete}」後，跟這個分類綁在一起的成就要一併刪除嗎？<br />
             選「保留」的話，成就會留著但進度會停在現在的狀態——除非之後又新增一個同名分類，才會自動接回去繼續累積。
           </p>

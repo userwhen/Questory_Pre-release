@@ -3,7 +3,7 @@ import { getState, setState } from '@/core/state.js';
 import { EventBus, makeIdempotentInit } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
 import { isDailyTask, isRecurringTask, isTaskDueForReset, sortTasks } from '@/task/utils/taskSort.js';
-import { getRewardWeight, getRewardRange } from '@/utils/rewardCurve.js';
+import { getRewardWeight, getRewardRange } from '@/reward/utils/rewardCurve.js';
 
 let _taskIdCounter = 0;// 避免同一毫秒內連續 addTask（例如批次複製）撞到相同 id
 let _rewardReqCounter = 0;
@@ -360,6 +360,16 @@ export const TaskEngine = {
     const couponText = rewards.coupon ? ' 🎫 獲得金幣券！' : '';
     EventBus.emit(Events.System.TOAST, `完成！+${rewards.gold}💰 +${rewards.exp}✨${comboText}${enchantText}${couponText}`);
     EventBus.emit(Events.Task.COMPLETED, { task, impact, gained: rewards, combo });
+    this._rollEggShardDrop();
+  },
+
+  _rollEggShardDrop() {
+    const roll = Math.random();
+    let shardId = null;
+    if (roll < 0.002) shardId = 'sys_pet_shard_ssr';      // 0.2%
+    else if (roll < 0.02) shardId = 'sys_pet_shard_sr';   // 1.8%
+    else if (roll < 0.12) shardId = 'sys_pet_shard_r';    // 10%
+    if (shardId) EventBus.emit(Events.Shop.REQUEST_GRANT_ITEM, { id: shardId, qty: 1 });
   },
 
   incrementTask(id) {
@@ -396,10 +406,18 @@ export const TaskEngine = {
     const history = getState().history || [];
     const dailyMap = {};
 
+    // 用本地日期，避免 toISOString() 造成跨日錯誤
+    const toLocalYmd = (value) => {
+      if (value == null) return null;
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return null;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
     history.forEach(task => {
-      const d = new Date(task.doneTime);
-      if (isNaN(d.getTime())) return;
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = toLocalYmd(task.doneTime || task.archivedDate || task.date);
+      if (!dateStr) return;
       if (!dailyMap[dateStr]) dailyMap[dateStr] = { date: dateStr, totalImpact: 0, totalExp: 0, tasks: [], attrCounts: {} };
       dailyMap[dateStr].tasks.push(task);
       if (task.attrs?.length) {
@@ -407,14 +425,14 @@ export const TaskEngine = {
           dailyMap[dateStr].attrCounts[attr] = (dailyMap[dateStr].attrCounts[attr] || 0) + 1;
         });
       }
-      if (task.status === 'completed') {
+      if (task.status === 'completed' || task.done) {
         dailyMap[dateStr].totalImpact += task.doneImpact || 0;
         dailyMap[dateStr].totalExp += task.lastReward?.exp || 0;
       }
     });
 
     return Object.values(dailyMap).map(day => {
-      const completed = day.tasks.filter(t => t.status === 'completed');
+      const completed = day.tasks.filter(t => t.status === 'completed' || t.done);
       completed.sort((a, b) => (b.doneImpact || 0) - (a.doneImpact || 0));
       const rank = day.totalImpact > 50 ? 'S' : day.totalImpact > 30 ? 'A' : day.totalImpact > 15 ? 'B' : 'C';
       let mainAttr = null;
@@ -425,6 +443,6 @@ export const TaskEngine = {
         }
       }
       return { ...day, rank, mvpTask: completed[0] || null, mainAttr };
-    }).sort((a, b) => new Date(b.date) - new Date(a.date));
+    }).sort((a, b) => (a.date < b.date ? 1 : -1));
   },
 };

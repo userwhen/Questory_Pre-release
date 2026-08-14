@@ -1,5 +1,5 @@
 import React from 'react';
-import Modal from '@/components/ui/Modal.jsx';
+import Modal from '@/ui/Modal.jsx';
 
 export default function QuestSelectorModal({ onSelect, onClose }) {
   const types = [
@@ -13,9 +13,9 @@ export default function QuestSelectorModal({ onSelect, onClose }) {
     <Modal title="接取任務" onClose={onClose}>
       {types.map(t => (
         <div key={t.key} onClick={() => onSelect(t.key)}
-          style={{ padding: 14, marginBottom: 10, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer' }}>
-          <div style={{ fontWeight: 700, fontSize: '1rem' }}>{t.label}</div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 3 }}>{t.desc}</div>
+          style={{ padding: 'var(--space-sm)', marginBottom: 'var(--space-xs)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer' }}>
+          <div style={{ fontWeight: 700, fontSize: 'var(--font-title)' }}>{t.label}</div>
+          <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted)', marginTop: 3 }}>{t.desc}</div>
         </div>
       ))}
     </Modal>

@@ -1,7 +1,7 @@
 /* src/hooks/useRequestAction.js */
 import { useState, useCallback } from 'react';
 import { EventHelper } from '@/core/events.js';
-import { toast } from '@/utils/toast.js';
+import { toast } from '@/ui/toast.js';
 
 /**
  * 包住「EventHelper.requestOnce + loading 狀態 + 成功/失敗/逾時 toast」這個重複很多次的 pattern。

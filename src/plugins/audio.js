@@ -174,14 +174,17 @@ export const Audio = {
     v ? this.playGameBGM() : this.stopCustomBGM();
   },
 
-  // ─── 播放「現在該播的 BGM」：有自訂音樂就播自訂的，沒有就播預設的 ───
+  // ─── 播放「現在該播的 BGM」：Pro 且有自訂音樂就播自訂的，否則播預設的 ───
   // 呼叫時機：① 玩家在 Settings 手動開啟音樂開關 ② App 啟動後第一次互動時嘗試接續播放
   async playGameBGM() {
-    const settings = useGameStore.getState().settings ?? {};
+    const state = useGameStore.getState();
+    const settings = state.settings ?? {};
     if (!settings.musicEnabled) return;
     if (this._ctx?.state === 'suspended') this._ctx.resume();
 
-    if (settings.customBGM === 'custom') {
+    const isPro = !!state.subscription?.active;
+    // 自訂 BGM 為 Pro 專屬：非 Pro 即使還有旗標／IndexedDB 資料也強制走預設
+    if (settings.customBGM === 'custom' && isPro) {
       try {
         const blob = await idbGetBgm();
         if (blob) {
@@ -193,6 +196,10 @@ export const Audio = {
       }
       // IndexedDB 裡找不到資料（例如清過瀏覽器資料、換了瀏覽器）：
       // 旗標跟實際資料對不上，順手修正回 null，避免下次又白跑一趟
+      useGameStore.setState(s => ({ settings: { ...s.settings, customBGM: null } }));
+    } else if (settings.customBGM === 'custom' && !isPro) {
+      // 取消訂閱後：清旗標與 IndexedDB，退回預設（與 Settings 的 clear 行為一致）
+      try { await idbClearBgm(); } catch (_) { /* ignore */ }
       useGameStore.setState(s => ({ settings: { ...s.settings, customBGM: null } }));
     }
 
@@ -219,8 +226,12 @@ export const Audio = {
     }
   },
 
-  // ─── 上傳自訂 BGM：存進 IndexedDB（跨重整/重開持久化）＋立即播放 ───
+  // ─── 上傳自訂 BGM（Pro 專屬）：存進 IndexedDB（跨重整/重開持久化）＋立即播放 ───
   async uploadCustomBGM(file) {
+    if (!useGameStore.getState().subscription?.active) {
+      // UI 應已鎖住；此處再擋一道，避免被直接呼叫
+      return;
+    }
     try {
       await idbSetBgm(file);
     } catch (e) {

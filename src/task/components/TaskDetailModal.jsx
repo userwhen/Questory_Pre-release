@@ -36,52 +36,52 @@ export default function TaskDetailModal({ task, onClose, onEdit, onToggle, onTog
         </div>
 
         <div style={modalBodyStyle}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)', marginBottom: 'var(--space-sm)' }}>
             {task.cat && <span style={catPillStyle}>{task.cat}</span>}
-            {isOverdue && <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: 4, background: 'var(--color-danger, #c0392b)', color: '#fff', fontWeight: 700 }}>⏰ 逾期</span>}
-            {task.pinned && <span style={{ fontSize: '0.85rem' }}>📌</span>}
-            {task.enchant?.boundAt && <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: 4, background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', fontWeight: 700 }}>✦ 祝福</span>}
+            {isOverdue && <span style={{ fontSize: 'var(--font-caption)', padding: '2px 6px', borderRadius: 'var(--radius-xs)', background: 'var(--color-danger, #c0392b)', color: '#fff', fontWeight: 700 }}>⏰ 逾期</span>}
+            {task.pinned && <span style={{ fontSize: 'var(--font-body)' }}>📌</span>}
+            {task.enchant?.boundAt && <span style={{ fontSize: 'var(--font-caption)', padding: '2px 6px', borderRadius: 'var(--radius-xs)', background: 'linear-gradient(135deg,var(--color-violet,#7c3aed),var(--color-rarity-sr,#a855f7))', color: '#fff', fontWeight: 700 }}>✦ 祝福</span>}
           </div>
 
           {(task.narrativeText || task.desc) && (
-            <p style={{ margin: '0 0 16px', lineHeight: 1.6, color: 'var(--text-2, #5c3d2e)', fontStyle: task.narrativeText ? 'italic' : 'normal' }}>
+            <p style={{ margin: '0 0 var(--space-md)', lineHeight: 1.6, color: 'var(--text-2, #5c3d2e)', fontStyle: task.narrativeText ? 'italic' : 'normal' }}>
               {task.narrativeText || task.desc}
             </p>
           )}
 
           {task.type === 'count' ? (
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 'var(--space-md)' }}>
               <div style={progressTrackStyle}>
                 <div style={{ ...progressBarStyle, width: `${countPct}%` }} />
                 <span style={progressTextStyle}>{task.curr || 0} / {task.target}</span>
               </div>
             </div>
           ) : subsTotal > 0 && (
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 'var(--space-md)' }}>
               {task.subs.map((sub, idx) => (
                 <div key={idx}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', marginBottom: 'var(--space-xs)', cursor: 'pointer' }}
                   onClick={() => onToggleSub(task.id, idx)}>
-                  <div style={{ width: 18, height: 18, border: `1px solid ${sub.done ? 'var(--color-correct, #227A59)' : 'var(--text-ghost, #9C7B5B)'}`, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: sub.done ? 'var(--color-correct, #227A59)' : 'transparent' }}>
-                    {sub.done && <span style={{ color: '#fff', fontSize: 11, fontWeight: 900 }}>✓</span>}
+                  <div style={{ width: 'var(--size-xs)', height: 'var(--size-xs)', border: `1px solid ${sub.done ? 'var(--color-correct, #227A59)' : 'var(--text-ghost, #9C7B5B)'}`, borderRadius: 'var(--radius-xs)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: sub.done ? 'var(--color-correct, #227A59)' : 'transparent' }}>
+                    {sub.done && <span style={{ color: '#fff', fontSize: 'var(--font-caption)', fontWeight: 900 }}>✓</span>}
                   </div>
-                  <span style={{ fontSize: '0.9rem', textDecoration: sub.done ? 'line-through' : 'none', opacity: sub.done ? 0.5 : 1 }}>{sub.text}</span>
+                  <span style={{ fontSize: 'var(--font-body)', textDecoration: sub.done ? 'line-through' : 'none', opacity: sub.done ? 0.5 : 1 }}>{sub.text}</span>
                 </div>
               ))}
             </div>
           )}
 
           {task.location && (
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 8 }}>📍 {task.location}</div>
+            <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted)', marginBottom: 'var(--space-xs)' }}>📍 {task.location}</div>
           )}
           {task.startDate && (
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 8 }}>🚀 起始日：{task.startDate}</div>
+            <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted)', marginBottom: 'var(--space-xs)' }}>🚀 起始日：{task.startDate}</div>
           )}
           {recurrenceText && (
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 8 }}>🔁 {recurrenceText}</div>
+            <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted)', marginBottom: 'var(--space-xs)' }}>🔁 {recurrenceText}</div>
           )}
           {task.deadline && (
-            <div style={{ fontSize: '0.85rem', color: isOverdue ? 'var(--color-danger, #c0392b)' : 'var(--text-muted)', fontWeight: isOverdue ? 700 : 400, marginBottom: 8 }}>
+            <div style={{ fontSize: 'var(--font-body)', color: isOverdue ? 'var(--color-danger, #c0392b)' : 'var(--text-muted)', fontWeight: isOverdue ? 700 : 400, marginBottom: 'var(--space-xs)' }}>
               📅 {task.deadline}{isOverdue ? '（已逾期）' : ''}
             </div>
           )}

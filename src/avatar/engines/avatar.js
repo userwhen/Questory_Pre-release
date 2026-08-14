@@ -2,7 +2,7 @@
 import { getState, setState } from '@/core/state.js';
 import { EventBus, makeIdempotentInit } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
-import { AvatarShop, GachaPool, GachaConfig } from '@/avatar/data/avatar_config.js';
+import { AvatarShop, GachaPool, GachaConfig, checkAttrGate, passesAttrGate } from '@/avatar/data/avatar_config.js';
 
 export const AvatarEngine = {
 
@@ -55,6 +55,13 @@ export const AvatarEngine = {
 
     const s = getState();
     const previewWearing = { ...(s.previewWearing ?? s.avatar?.wearing ?? {}) };
+    // 與 wearItem 一致：整片 bg 與牆/地互斥
+    if (category === 'bg') {
+      delete previewWearing.wall_bg;
+      delete previewWearing.floor_bg;
+    } else if (category === 'wall_bg' || category === 'floor_bg') {
+      delete previewWearing.bg;
+    }
     previewWearing[category] = itemId;
     setState(() => ({ previewWearing }));
     EventBus.emit(Events.Avatar.UPDATED);
@@ -67,7 +74,11 @@ export const AvatarEngine = {
       category = item?.type ?? 'suit';
     }
 
-    // 寵物：轉發給 PetEngine，不在此處理
+    // 寵物：轉發給 PetEngine，不在此處理。
+    // 初版裁切：Avatar 頁面的寵物/陪伴分頁入口已隱藏，這個分支現在沒有
+    // 任何 UI 路徑會觸發到；PetEngine 也沒有 init，EventBus 上這個事件
+    // 沒有監聽者，emit 出去等同無操作，不會報錯。刻意留著不刪：
+    // 之後要把寵物系統接回來時，這裡完全不用改。
     if (category === 'pet') {
       EventBus.emit(Events.Pet.REQUEST_WEAR_ITEM, { itemId });
       return;
@@ -112,6 +123,14 @@ export const AvatarEngine = {
         delete wearing.hair_combo;
       }
 
+      // 整片背景 vs 牆/地：互斥，避免疊兩套背景邏輯
+      if (category === 'bg') {
+        delete wearing.wall_bg;
+        delete wearing.floor_bg;
+      } else if (category === 'wall_bg' || category === 'floor_bg') {
+        delete wearing.bg;
+      }
+
       wearing[category] = itemId;
 
       EventBus.emit(Events.System.TOAST, '✨ 已更換裝備');
@@ -130,6 +149,12 @@ export const AvatarEngine = {
 
     const item = AvatarShop.find(i => i.id === itemId);
     if (!item) return { success: false, msg: '找不到這件商品' };
+
+    // 屬性門檻（額外條件；鑽石夠仍可能被擋）
+    const gate = checkAttrGate(item, s.attrs);
+    if (!gate.ok) {
+      return { success: false, msg: gate.msg || '屬性不足' };
+    }
 
     const totalGem = (s.freeGem ?? 0) + (s.paidGem ?? 0);
 
@@ -197,22 +222,28 @@ export const AvatarEngine = {
     const totalGem = (s.freeGem ?? 0) + (s.paidGem ?? 0);
 
     let currentBag = [...(s.bag ?? [])];
-    const ticketIdx = currentBag.findIndex(i => i.id === 'sys_gacha_ticket');
+    const ticketIdx = currentBag.findIndex(i => i.id === 'sys_misc_gacha_ticket');
     const ticketCount = ticketIdx > -1 ? currentBag[ticketIdx].count : 0;
 
-    let useTickets = 0;
+    // 券優先：先扣券，不足次數用鑽補。
+    // 優惠只在「全鑽十連」：混券時不足部分按單抽價計。
+    const useTickets = Math.min(ticketCount, times);
+    const remain = times - useTickets;
     let gemNeeded = 0;
-
-    if (ticketCount >= times) {
-      useTickets = times;
-    } else {
-      gemNeeded = times === 1 ? GachaConfig.singleCost : GachaConfig.tenCost;
+    if (remain > 0) {
+      if (useTickets === 0 && times === 10) {
+        gemNeeded = GachaConfig.tenCost; // 全鑽十連優惠
+      } else {
+        gemNeeded = remain * GachaConfig.singleCost;
+      }
     }
 
     if (gemNeeded > 0 && totalGem < gemNeeded) {
       EventBus.emit(
         Events.System.TOAST,
-        `💎 資源不足（需 ${gemNeeded} 鑽 或 ${times} 張券）`
+        useTickets > 0
+          ? `💎 鑽石不足（已用 ${useTickets} 券，還需 ${gemNeeded} 鑽）`
+          : `💎 資源不足（需 ${gemNeeded} 鑽 或 ${times} 張券）`
       );
       return null;
     }
@@ -236,6 +267,15 @@ export const AvatarEngine = {
     let currentUnlocked = [...(s.avatar?.unlocked ?? [])];
     let pity = s.gachaPity ?? 0;
 
+    // 依當前屬性過濾扭蛋池：未達 reqAttr 的商品不進池（公平、不抽到不能穿的）
+    const attrs = s.attrs || {};
+    const eligiblePool = GachaPool.filter(item => passesAttrGate(item, attrs));
+    // 若全部被濾掉（極端情況），退回無門檻商品，避免空池崩潰
+    const safePool = eligiblePool.length > 0
+      ? eligiblePool
+      : GachaPool.filter(item => !item.reqAttr);
+    const drawPool = safePool.length > 0 ? safePool : GachaPool;
+
     for (let i = 0; i < times; i++) {
       pity++;
       const roll = Math.random();
@@ -251,10 +291,10 @@ export const AvatarEngine = {
         rarity = 'SR';
       }
 
-      const pool = GachaPool.filter(item => item.rarity === rarity);
+      const pool = drawPool.filter(item => item.rarity === rarity);
       const picked = pool.length > 0
         ? pool[Math.floor(Math.random() * pool.length)]
-        : GachaPool[Math.floor(Math.random() * GachaPool.length)];
+        : drawPool[Math.floor(Math.random() * drawPool.length)];
 
       const isNew = !currentUnlocked.includes(picked.id);
       results.push({ ...picked, isNew });
@@ -308,14 +348,14 @@ export const AvatarEngine = {
       bag.splice(fragIdx, 1);
     }
 
-    const ticketIdx = bag.findIndex(i => i.id === 'sys_gacha_ticket');
+    const ticketIdx = bag.findIndex(i => i.id === 'sys_misc_gacha_ticket');
     if (ticketIdx > -1) {
       bag[ticketIdx] = {
         ...bag[ticketIdx],
         count: bag[ticketIdx].count + craftCount,
       };
     } else {
-      bag.push({ id: 'sys_gacha_ticket', count: craftCount });
+      bag.push({ id: 'sys_misc_gacha_ticket', count: craftCount });
     }
 
     setState(() => ({ bag }));

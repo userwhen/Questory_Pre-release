@@ -1,0 +1,48 @@
+{
+  "report": {
+    "mode": "write",
+    "scannedFiles": {
+      "js": 64,
+      "css": 2
+    },
+    "filesWithChanges": 0,
+    "byCategory": {
+      "color": {
+        "fixed": 0,
+        "skipped": 127
+      },
+      "radius": {
+        "fixed": 0,
+        "skipped": 46
+      },
+      "shadow": {
+        "fixed": 0,
+        "skipped": 42
+      },
+      "zIndex": {
+        "fixed": 0,
+        "skipped": 35
+      },
+      "fontSize": {
+        "fixed": 0,
+        "skipped": 2
+      },
+      "spacing": {
+        "fixed": 0,
+        "skipped": 116
+      },
+      "dimension": {
+        "fixed": 0,
+        "skipped": 198
+      }
+    },
+    "excludedFromAutofix": [
+      "lineHeight",
+      "letterSpacing",
+      "borderWidth",
+      "angle(transform rotate)",
+      "dynamic values (template literals / ternary)"
+    ]
+  },
+  "fixLog": []
+}

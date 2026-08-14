@@ -1,15 +1,34 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { DefaultData, GameConfig } from '@/data/data.js';
-import { EventBus } from './events.js';
-import { Events } from './event_types.js';
+import { SystemShop } from '@/shop/data/shopConfig.js';
+import { EventBus } from '@/core/events.js';
+import { Events } from '@/core/event_types.js';
 
 const SAVE_KEY = GameConfig?.System?.SaveKey ?? 'questory_save_v1';
 export const BASE_TASK_CATS = ['日常', '運動', '工作', '待辦', '願望'];
 export const LOCKED_TASK_CATS = ['日常', '運動']; // 日常=系統保留fallback；運動=綁定卡路里欄位，皆不可改名/刪除
 export const FALLBACK_TASK_CAT = '日常'; // 👈 補上這一行
 const FREE_CUSTOM_CAT_LIMIT = 2;   // 免費版：可額外新增 2 個
-const PRO_CUSTOM_CAT_LIMIT  = 10;  // PRO 版：可額外新增 10 個
+const PRO_CUSTOM_CAT_LIMIT = 10;  // PRO 版：可額外新增 10 個
+// ── 商店道具 ID 命名統一遷移表（一次性轉換用，詳見《Questory 商店道具 ID 命名規範》）──
+// key 是舊 ID、value 是新 ID，只給下面 migrateData() 用來轉換舊存檔；
+// SystemShop（shop/data/shopConfig.js）現在的實際定義已經直接是新 ID，不會再用到這份表查詢目前資料。
+const SHOP_ID_MIGRATION = {
+  sys_food: 'sys_cal_meal',
+  sys_relax: 'sys_time_relax',
+  sys_money: 'sys_cash_pouch',
+  sys_ticket: 'sys_misc_relax_ticket',
+  sys_rename: 'sys_misc_rename_ticket',
+  sys_stamina_s: 'sys_misc_stamina_s',
+  sys_stamina_m: 'sys_misc_stamina_m',
+  sys_stamina_l: 'sys_misc_stamina_l',
+  sys_gacha_ticket: 'sys_misc_gacha_ticket',
+  sys_makeup_ticket: 'sys_misc_makeup_ticket',
+  PET_SHARD_R: 'sys_pet_shard_r',
+  PET_SHARD_SR: 'sys_pet_shard_sr',
+  PET_SHARD_SSR: 'sys_pet_shard_ssr',
+};
 const defaultState = () => JSON.parse(JSON.stringify(DefaultData));
 
 // 精力上限：基礎 30，每 5 等+2，上限 100
@@ -111,7 +130,25 @@ export const useGameStore = create(
             ...(s.positions ?? {}),
             companion: s.positions?.companion ?? { x: 20, y: 30 },
           };
+          // 商店道具 ID 統一遷移 + 快照欄位同步：
+          // 1. 把舊 ID（PET_SHARD_R 等）換成新 ID，bag 跟 sysShop 的 key 都要換
+          // 2. 每筆背包快照的 name/desc/icon/category/val/price 用「目前」的商品定義蓋回去，
+          //    只留 count 不動——避免道具改版後，玩家很早以前買的東西還停留在舊資料
+          const remapShopId = (id) => SHOP_ID_MIGRATION[id] ?? id;
 
+          const bag = (s.bag ?? []).map(b => {
+            const newId = remapShopId(b.id);
+            const sysProto = (SystemShop ?? []).find(p => p.id === newId);
+            if (sysProto) return { ...sysProto, id: newId, count: b.count };
+            const userProto = (s.shop?.user ?? []).find(p => p.id === newId);
+            if (userProto) return { ...userProto, count: b.count };
+            // 找不到來源（商品已下架）：只換 id，其餘維持原本快照
+            return newId === b.id ? b : { ...b, id: newId };
+          });
+
+          const sysShop = Object.fromEntries(
+            Object.entries(s.sysShop ?? {}).map(([id, v]) => [remapShopId(id), v])
+          );
           return {
             ...s,
             userName,
@@ -129,6 +166,7 @@ export const useGameStore = create(
             petRelationship: s.petRelationship ?? 50,
             petArchive: s.petArchive ?? [],
             traveledPets: s.traveledPets ?? [],
+            incubatingEggs: s.incubatingEggs ?? [],
             subscription,
             story,
             cal,
@@ -146,6 +184,8 @@ export const useGameStore = create(
             taskCats: s.taskCats ?? [...BASE_TASK_CATS],
             customTaskCatNames: s.customTaskCatNames ?? [],
             rewardCoupons: s.rewardCoupons ?? 0,
+            bag,
+            sysShop,
           };
         });
       },

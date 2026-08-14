@@ -11,7 +11,6 @@ const THEMES = {
     ],
     quickIcons: [
       { icon: '📋', page: 'quick' },
-      { icon: '⏳', page: 'timer' },
       { icon: '👘', page: 'avatar' },
       { icon: '❓', page: 'qa' },
     ],
@@ -25,7 +24,6 @@ const THEMES = {
     ],
     quickIcons: [
       { icon: '🗂️', page: 'quick' },
-      { icon: '⏱️', page: 'timer' },
       { icon: '🦾', page: 'avatar' },
       { icon: '❓', page: 'qa' },
     ],
@@ -39,7 +37,6 @@ const THEMES = {
     ],
     quickIcons: [
       { icon: '📜', page: 'quick' },
-      { icon: '⌛', page: 'timer' },
       { icon: '🎓', page: 'avatar' },
       { icon: '❓', page: 'qa' },
     ],
@@ -53,7 +50,6 @@ const THEMES = {
     ],
     quickIcons: [
       { icon: '📝', page: 'quick' },
-      { icon: '🌅', page: 'timer' },
       { icon: '👒', page: 'avatar' },
       { icon: '❓', page: 'qa' },
     ],
@@ -67,7 +63,6 @@ const THEMES = {
     ],
     quickIcons: [
       { icon: '📡', page: 'quick' },
-      { icon: '⏲️', page: 'timer' },
       { icon: '🥽', page: 'avatar' },
       { icon: '❓', page: 'qa' },
     ],
@@ -81,7 +76,6 @@ const THEMES = {
     ],
     quickIcons: [
       { icon: '📜', page: 'quick' },
-      { icon: '⏳', page: 'timer' },
       { icon: '🧜', page: 'avatar' },
       { icon: '❓', page: 'qa' },
     ],
@@ -95,7 +89,6 @@ const THEMES = {
     ],
     quickIcons: [
       { icon: '📝', page: 'quick' },
-      { icon: '🌅', page: 'timer' },
       { icon: '🐠', page: 'avatar' },
       { icon: '❓', page: 'qa' },
     ],
@@ -109,7 +102,6 @@ const THEMES = {
     ],
     quickIcons: [
       { icon: '📜', page: 'quick' },
-      { icon: '⏳', page: 'timer' },
       { icon: '🎭', page: 'avatar' },
       { icon: '❓', page: 'qa' },
     ],
@@ -124,18 +116,14 @@ const DEFAULTS = {
     { id: 'shop', icon: '🛒', label: '商店', action: 'shop' },
   ],
   quickIcons: [
-    { icon: '📅', page: 'checkin' },
     { icon: '📜', page: 'quick'   },
-    { icon: '🍅', page: 'timer'   },
     { icon: '👗', page: 'avatar'  },
     { icon: '❓', page: 'qa'      },
   ],
 };
 
 const BASIC_QUICK_ICONS = [
-  { icon: '📅', page: 'checkin' },
   { icon: '📜', page: 'quick'   },
-  { icon: '🍅', page: 'timer'   },
 ];
 
 export function getNavbar(theme) {
@@ -144,12 +132,7 @@ export function getNavbar(theme) {
 
 export function getQuickIcons(theme, isBasic) {
   if (isBasic) return BASIC_QUICK_ICONS;
-  const base = THEMES[theme]?.quickIcons ?? [...DEFAULTS.quickIcons];
-  // 自動補簽到按鈕
-  if (!base.some(i => i.page === 'checkin')) {
-    return [{ icon: '📅', page: 'checkin' }, ...base];
-  }
-  return base;
+  return THEMES[theme]?.quickIcons ?? [...DEFAULTS.quickIcons];
 }
 
 export function getPetHouseIcon(theme) {
@@ -177,6 +160,7 @@ export const SettingsShopItems = [
   { id: 'theme_basic_story',  name: '🌙 霓光暗夜',   type: 'theme_basic', desc: '極黑模式搭配霓虹點綴，護眼深色簡約版。',                                         price: 0,   currency: 'pro',  color: '#B829EA', bg: '#1E1E21', border: '#333336', badge: 'Pro', preview: 'basic-story'  },
   { id: 'theme_basic_siren',  name: '🧜 深海藍黑',   type: 'theme_basic', desc: '深海色票基礎版，只換配色不含紋路。',                                             price: 0,   currency: 'pro',  color: '#00C9A7', bg: '#060D1A', border: '#0E2038', badge: 'Pro', preview: 'basic-siren'  },
   { id: 'theme_basic_gilded', name: '✨ 鎏金暗影',   type: 'theme_basic', desc: '深淵鎏金色票基礎版，保留高對比復古金綠配色，移除背景光柱動效。',                   price: 0,   currency: 'pro',  color: '#C8891E', bg: '#0C1A14', border: '#5A4614', badge: 'Pro', preview: 'basic-gilded' },
-  { id: 'learning',           name: '📚 語言學習模組', type: 'module',      desc: '解鎖多語言劇情與單字替換功能。',                                                 price: 100, currency: 'paid', color: '#f57f17', bg: '#fff8e1', border: '#ffb300', badge: 'HOT'                         },
-  { id: 'module_pet',         name: '🐾 寵物陪伴系統', type: 'module',      desc: '解鎖大廳專屬寵物與互動功能。',                                                   price: 150, currency: 'paid', color: '#4ecb71', bg: '#e8f5e9', border: '#81c784', badge: 'NEW'                         },
+  // 初版裁切：learning（綁 Story 單字替換）、module_pet（綁寵物系統）先拿掉，
+  // 兩個系統都還沒進這個分支，賣了也沒有對應功能可解鎖。
+  // 之後要開回來，把這兩筆物件定義加回來即可（內容見完整版 src9 分支）。
 ];

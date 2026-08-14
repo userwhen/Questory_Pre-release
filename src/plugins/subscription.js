@@ -1,7 +1,7 @@
 import { useGameStore } from '@/core/state.js';
 import { EventBus } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
-import { Audio } from './audio.js';
+import { Audio } from '@/plugins/audio.js';
 
 export const Sub = {
   SUB_MODE:       'mock',
@@ -41,8 +41,11 @@ export const Sub = {
 
   canUseFocusLock() { return this.isProOrTrial() ? { ok: true } : { ok: false, reason: 'Focus Lock 為 Pro 功能' }; },
   canUseCalendar()  { return this.isProOrTrial() ? { ok: true } : { ok: false, reason: '行事曆同步為 Pro 功能' }; },
-  canUseScanner()   { return this.isProOrTrial() ? { ok: true } : { ok: false, reason: '條碼掃描為 Pro 功能' }; },
   canUseTheme()     { return this.isProOrTrial() ? { ok: true } : { ok: false, reason: '自訂主題為 Pro 功能' }; },
+
+  // Pro（含試用）期間全站免廣告，跟其他 canUseX() 判斷式同一套邏輯，
+  // 給 plugins/ads.js 跟廣告版位的 UI 元件共用。
+  shouldShowAds() { return !this.isProOrTrial(); },
 
   startTrial() {
     const s = useGameStore.getState().subscription ?? {};

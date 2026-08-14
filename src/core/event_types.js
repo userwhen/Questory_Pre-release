@@ -130,7 +130,6 @@ export const Events = {
     COMPLETE_CONTAINER_RESULT: 'ach:complete_container_result',   // payload: { success, msg?, reward?, summary?, requestId }
 
     // ── 模式 C：不需要等回應，UI 靠上面的 UPDATED 重繪 ──
-    REQUEST_CREATE_MILESTONE: 'ach:request_create_milestone', // payload: 里程碑表單資料
     REQUEST_UPDATE_MILESTONE: 'ach:request_update_milestone', // payload: 里程碑表單資料
     REQUEST_DELETE_MILESTONE: 'ach:request_delete_milestone', // payload: { id }
     REQUEST_CREATE_CONTAINER: 'ach:request_create_container', // payload: { title, taskId } — 新增任務時勾選「建立新成就」
@@ -197,6 +196,11 @@ export const Events = {
     // ── 關閉寵物系統：清空當前寵物（不影響 petArchive/traveledPets/retiredPetHistory）──
     REQUEST_DISABLE_MODULE: 'pet:request_disable_module', // Settings 頁手動關閉，UI 端已跳過 ConfirmDialog 確認
     REQUEST_WIPE_CURRENT: 'pet:request_wipe_current',      // 訂閱到期/取消、且沒买断時呼叫，只清資料不動 module_pet_active
+    REQUEST_SYNTHESIZE_EGG: 'pet:request_synthesize_egg',     // payload: { shardId }
+    REQUEST_START_INCUBATING: 'pet:request_start_incubating', // payload: { eggBaseId }
+    REQUEST_OPEN_EGG: 'pet:request_open_egg',       // payload: { incubatingId, appearanceId, requestId }
+    EGG_OPENED: 'pet:egg_opened',                   // payload: { success, hatchedPet?, msg?, requestId }
+    REQUEST_RESOLVE_HATCH: 'pet:request_resolve_hatch', // payload: { choice, hatchedPet, replaceIndex? }
   },
   Timer: {
     // 原本是裸字串 'TIMER_COMPLETED'（跟其他 category:action 命名風格不一致），

@@ -70,8 +70,26 @@ export function sortTasks(tasks, categoryFilter) {
 // 用本地時區組日期字串，避免 toISOString() 的 UTC 轉換造成日期偏移一天
 export function toLocalDateStr(date) {
   const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+/** 只取日期部分再解析為當地 00:00，避免 "YYYY-MM-DDTHH:mm" 在不同環境被當 UTC 造成前一天 */
+export function parseLocalDateOnly(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number') {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  const s = String(value).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 // 給一個任務跟日期範圍（rangeStart/rangeEnd 皆為 Date），算出這個任務在範圍內所有會出現的日期（'YYYY-MM-DD' 陣列）
 export function getOccurrenceDatesInRange(task, rangeStart, rangeEnd) {
   const dates   = [];
@@ -81,23 +99,24 @@ export function getOccurrenceDatesInRange(task, rangeStart, rangeEnd) {
 
   // 有明確截止日的：只要落在範圍內就算一次（不論是否也有循環規則）
   if (task.deadline) {
-    const d = new Date(task.deadline);
-    d.setHours(0, 0, 0, 0);
-    if (d.getTime() >= startMs && d.getTime() <= endMs) {
-      dates.push(toLocalDateStr(d));
-    }
+    const d = parseLocalDateOnly(task.deadline);
+    if (d) {
+      const dMs = d.getTime();
+      if (dMs >= startMs && dMs <= endMs) {
+        dates.push(toLocalDateStr(d));
+      }
 
-    // 非循環的一次性任務：逾期仍未完成時，除了原本 deadline 那天（維持歷史真實性）外，
-    // 額外把「今天」也算進投影日期，讓行事曆持續提醒使用者尚未處理
-    if (!isRecurringTask(task) && !task.done) {
-      const todayMs = new Date().setHours(0, 0, 0, 0);
-      if (d.getTime() < todayMs && todayMs >= startMs && todayMs <= endMs) {
-        dates.push(toLocalDateStr(todayMs));
+      // 非循環的一次性任務：逾期仍未完成時，除了原本 deadline 那天外，額外投影「今天」
+      if (!isRecurringTask(task) && !task.done) {
+        const todayMs = new Date().setHours(0, 0, 0, 0);
+        if (dMs < todayMs && todayMs >= startMs && todayMs <= endMs) {
+          dates.push(toLocalDateStr(todayMs));
+        }
       }
     }
   }
 
-  // 循環規則的額外投影：狩獵任務這種沒有截止日的，主要靠這段才會出現在行事曆上
+  // 循環規則的額外投影
   if (task.recurrence) {
     const weekDays = task.recurrence.days || [];
     if (task.recurrence.unit === 'week' && weekDays.length > 0) {
@@ -112,21 +131,24 @@ export function getOccurrenceDatesInRange(task, rangeStart, rangeEnd) {
       const stepMs   = interval * unitDays * DAY_MS;
 
       if (stepMs > 0) {
-        // 起始日現在是 task.startDate（跟 recurrence 脫鉤），不再是 task.recurrence.startDate
-        let anchorMs = task.startDate
-          ? new Date(task.startDate).setHours(0, 0, 0, 0)
-          : new Date(task.createDate || Date.now()).setHours(0, 0, 0, 0);
+        const anchorDate = task.startDate
+          ? parseLocalDateOnly(task.startDate)
+          : parseLocalDateOnly(task.createDate || Date.now());
+        let anchorMs = anchorDate ? anchorDate.getTime() : new Date().setHours(0, 0, 0, 0);
 
         while (anchorMs < startMs) anchorMs += stepMs;
         while (anchorMs > startMs) anchorMs -= stepMs;
 
         for (let t = anchorMs; t <= endMs; t += stepMs) {
           if (t >= startMs) dates.push(toLocalDateStr(t));
-        }      }
+        }
+      }
     }
   }
 
-  return [...new Set(dates)]; // 去重：同時有截止日又符合循環規則時可能重複算到同一天
+  // 無 deadline、無 recurrence 的普通任務不投影到行事曆（避免大部分待辦都出現在建立日）
+
+  return [...new Set(dates)];
 }
 // 依「選定日期」決定卡片該顯示什麼狀態、能不能互動：
 //   - 非循環任務：只有一個實例，不受跨日重置影響，永遠顯示真實可互動狀態

@@ -4,14 +4,15 @@ import { useShallow } from 'zustand/react/shallow';
 import { useGameStore } from '@/core/state.js';
 import { EventBus } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
-import AchPage from '@/components/pages/AchPage.jsx';
+import AchPage from '@/ach/pages/AchPage.jsx';
 import {
   modalAnim, pageStyle, segmentWrapStyle, segBtnStyle,
   filterBarStyle, filterScrollStyle, filterBtnStyle,
   scrollAreaStyle, emptyStyle, iconBtnStyle, fabStyle,
   btnStyle, btnSmallStyle,
 } from '@/task/components/TaskStyles.js';
-import ConfirmDialog from '@/components/ui/ConfirmDialog.jsx';
+import { btnDangerStyle } from '@/styles/modalStyles.js';
+import ConfirmDialog from '@/ui/ConfirmDialog.jsx';
 import QuestSelectorModal from '@/task/components/QuestSelectorModal.jsx';
 import HistoryView from '@/task/components/HistoryView.jsx';
 import TaskCard from '@/task/components/TaskCard.jsx';
@@ -208,17 +209,8 @@ if (quickAddOnly) {
     <div style={pageStyle}>
       <style>{modalAnim}</style>
 
-      {view === 'history' ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>📜 歷史紀錄</span>
-          <button style={{ background: 'transparent', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }} onClick={() => switchView('list')}>←</button>
-        </div>
-      ) : view === 'calendar' ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>📅 行事曆</span>
-          <button style={{ background: 'transparent', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }} onClick={() => switchView('list')}>←</button>
-        </div>
-      ) : (
+      {/* history / calendar / 殿堂 已由 onRegisterBack 攔截系統返回鍵，不再顯示頂部標題列 */}
+      {(view === 'list' || view === 'ach') && (
         <div style={segmentWrapStyle}>
           {[['list', '📋 任務列表'], ['ach', '🏆 榮譽成就']].map(([val, label]) => (
             <button key={val}
@@ -228,7 +220,11 @@ if (quickAddOnly) {
         </div>
       )}
 
-      {view === 'history' && <div style={scrollAreaStyle}><HistoryView taskHistory={history} /></div>}
+      {view === 'history' && (
+        <div style={scrollAreaStyle}>
+          <HistoryView taskHistory={history} onBackToList={() => switchView('list')} />
+        </div>
+      )}
 
       {view === 'calendar' && (
         <CalendarView
@@ -241,6 +237,7 @@ if (quickAddOnly) {
           onRequestNewTask={openNewTaskOnDate}
           onEdit={openEditForm}
           skillIconMap={skillIconMap}
+          onBackToList={() => switchView('list')}
         />
       )}
 
@@ -260,7 +257,7 @@ if (quickAddOnly) {
                   onClick={() => setFilter(c)}>{c}</button>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 6, paddingLeft: 10, marginLeft: 4, borderLeft: '1px solid var(--border, rgba(0,0,0,0.12))' }}>
+            <div style={{ display: 'flex', gap: 'var(--space-xs)', paddingLeft: 'var(--space-xs)', marginLeft: 'var(--space-xs)', borderLeft: '1px solid var(--border, rgba(0,0,0,0.12))' }}>
               <button style={filterBtnStyle} onClick={() => switchView('calendar')} title="行事曆檢視">📅</button>
               <button style={filterBtnStyle} onClick={() => switchView('history')} title="歷史紀錄">📜</button>
             </div>
@@ -268,7 +265,7 @@ if (quickAddOnly) {
 
           <div style={{ ...scrollAreaStyle, paddingBottom: isSelectMode ? 80 : 100 }}>
             {displayList.length === 0
-              ? <div style={emptyStyle}>📭<br />暫無任務<br /><span style={{ fontSize: '0.85rem' }}>點擊右下角 ＋ 新增</span></div>
+              ? <div style={emptyStyle}>📭<br />暫無任務<br /><span style={{ fontSize: 'var(--font-body)' }}>點擊右下角 ＋ 新增</span></div>
               : displayList.map(t => (
                 <TaskCard key={t.id} task={t}
                   onToggle={handleToggle}
@@ -278,7 +275,7 @@ if (quickAddOnly) {
                   isSelectMode={isSelectMode}
                   isSelected={selectedTasks.has(t.id)}
                   onToggleSelect={toggleSelect}
-                  onLongPress={startSelectMode}
+                  onEnterSelectMode={startSelectMode}
                   onEdit={openEditForm}
                   onDragStart={handleCardDragStart}
                   onDragMove={handleCardDragMove}
@@ -290,11 +287,11 @@ if (quickAddOnly) {
           </div>
 
           {isSelectMode ? (
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'var(--bg-panel)', padding: 15, boxShadow: '0 -4px 10px rgba(0,0,0,0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 20, borderTop: '1px solid var(--border)' }}>
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'var(--bg-panel)', padding: 'var(--space-md)', boxShadow: '0 -4px 10px rgba(0,0,0,0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 20, borderTop: '1px solid var(--border)' }}>
               <div style={{ fontWeight: 'bold' }}>已選取: {selectedTasks.size}</div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 'var(--space-xs)', alignItems: 'center' }}>
                 <button style={{ ...btnSmallStyle, background: 'var(--color-info)', color: '#fff', border: 'none' }} onClick={executeBatchCopy} disabled={selectedTasks.size === 0}>複製</button>
-                <button style={{ ...btnSmallStyle, background: 'var(--color-danger)', color: '#fff', border: 'none' }} onClick={() => setShowConfirm(true)} disabled={selectedTasks.size === 0}>刪除</button>
+                <button style={{ ...btnDangerStyle, padding: 'var(--space-xs) var(--space-sm)', fontSize: 'var(--font-body)' }} onClick={() => setShowConfirm(true)} disabled={selectedTasks.size === 0}>刪除</button>
                 <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '0 2px' }} />
                 <button style={btnSmallStyle} onClick={() => setSelectedTasks(selectedTasks.size === displayList.length ? new Set() : new Set(displayList.map(t => t.id)))}>
                   {selectedTasks.size === displayList.length ? '取消全選' : '全選'}

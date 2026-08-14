@@ -1,7 +1,7 @@
 import { useGameStore } from '@/core/state.js';
 import { EventBus } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
-import { Audio } from './audio.js';
+import { Audio } from '@/plugins/audio.js';
 import { Purchases, PRODUCT_CATEGORY } from '@revenuecat/purchases-capacitor';
 
 export const IAP = {
@@ -51,6 +51,8 @@ export const IAP = {
   async _initLive() {
     if (typeof Capacitor === 'undefined') return;
     try {
+      // TODO(上架前必做)：換成正式的 RevenueCat Android public key，
+      // 目前這組是佔位字串，會導致 configure() 失敗、自動降級為模擬購買。
       await Purchases.configure({ apiKey: 'YOUR_REVENUECAT_ANDROID_PUBLIC_KEY' });
 
       const skus = [...this.PRODUCTS, ...this.DONATE_PRODUCTS].map(p => p.sku);
