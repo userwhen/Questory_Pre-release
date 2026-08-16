@@ -420,3 +420,7 @@ input, textarea {
     transition: margin-top 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.2s !important;
     z-index: 9999 !important; 
 }
+@keyframes char-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50%      { transform: scaleY(1.025); }
+}

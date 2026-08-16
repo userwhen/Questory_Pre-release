@@ -110,10 +110,7 @@ export default function MainPage({ onNavigate }) {
       // 以寬為主：寬度貼齊 PANEL，維持「正常寬」
       // 僅當舞台因此高於 PANEL 時才再縮小（極矮螢幕）
       // 極高視窗：上下露出 container 深色（HUD/Nav 同系），不把房間拉高變形
-      let scale = w / DESIGN_WIDTH;
-      if (DESIGN_HEIGHT * scale > h) {
-        scale = h / DESIGN_HEIGHT;
-      }
+      const scale = Math.max(w / DESIGN_WIDTH, h / DESIGN_HEIGHT);
       const scaledW = DESIGN_WIDTH * scale;
       const scaledH = DESIGN_HEIGHT * scale;
       const offsetX = (w - scaledW) / 2;
