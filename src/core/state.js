@@ -149,6 +149,14 @@ export const useGameStore = create(
           const sysShop = Object.fromEntries(
             Object.entries(s.sysShop ?? {}).map(([id, v]) => [remapShopId(id), v])
           );
+
+          // 大廳場景狀態：舊存檔可能沒有，補預設；實際 entities 由 StageEngine.rebuildScene 寫入
+          const stage = s.stage ?? {
+            backgrounds: { room: null, wall: null, floor: null },
+            characterSlot: { col: 4, row: 12 },
+            entities: [],
+          };
+
           return {
             ...s,
             userName,
@@ -186,6 +194,7 @@ export const useGameStore = create(
             rewardCoupons: s.rewardCoupons ?? 0,
             bag,
             sysShop,
+            stage,
           };
         });
       },

@@ -152,21 +152,21 @@ export const Events = {
     REQUEST_EXPORT_SAVE: 'settings:request_export_save',
     REQUEST_IMPORT_SAVE: 'settings:request_import_save',       // payload: { file }
     REQUEST_PERFORM_RESET: 'settings:request_perform_reset',
-    // ── 測試用假訂閱開關（TODO：串接真正 IAP 後，應改由付款成功的 callback 觸發，不能再讓 UI 直接呼叫）──
-    REQUEST_TOGGLE_MOCK_SUB: 'settings:request_toggle_mock_sub',
-    // ── 鎖定功能列的 Pro 按鈕（目前先跳 Toast；之後想做「Pro 介紹頁」時，見②，暫緩）──
-    REQUEST_SHOW_PRO_UPSELL: 'settings:request_show_pro_upsell', // payload: { label }
-    // ── 訂閱到期/取消，通知 UI 哪些沒买断的功能被一併鎖住了（payload: { features: string[] }）──
-    SUBSCRIPTION_FEATURES_LOST: 'settings:subscription_features_lost',
+  },
+  Stage: {
+    UPDATED: 'stage:updated',
+
+    // UI → 外部（MainPage 只 emit，不決定行為）
+    ENTITY_TAP: 'stage:entity_tap',           // { id, type, slot }
+    ENTITY_LONG_PRESS: 'stage:entity_long_press', // { id, type, slot }
+
+    // 外部 → StageEngine（臨時控制）
+    REQUEST_SET_VISIBLE: 'stage:request_set_visible', // { id, visible }
+    REQUEST_SET_ANIM: 'stage:request_set_anim',       // { id, anim }
+    REQUEST_SET_SLOT: 'stage:request_set_slot',       // { id, slot }  // 劇情移主角、放家具用
   },
   Avatar: {
     UPDATED: 'avatar:updated',
-
-    // ── 抽卡（模式 B，含隨機性，需要 requestId 搭配 EventHelper）──
-    REQUEST_GACHA: 'avatar:request_gacha',       // payload: { times, requestId }
-    GACHA_RESULT: 'avatar:gacha_result',         // payload: { results, requestId }
-    // ── 碎片合成券（模式 C，UI 靠 Events.Avatar.UPDATED 自動重繪）──
-    REQUEST_CRAFT_TICKET: 'avatar:request_craft_ticket',
 
     // ── AvatarPage.jsx 更衣室（模式 C，不需要回應）──
     REQUEST_PREVIEW_ITEM: 'avatar:request_preview_item',           // payload: { itemId }
@@ -175,6 +175,13 @@ export const Events = {
     // ── 購買（模式 B：需要立即知道成功與否、扣款結果）──
     REQUEST_BUY_ITEM: 'avatar:request_buy_item',   // payload: { id, requestId }
     BUY_ITEM_RESULT: 'avatar:buy_item_result',     // payload: { success, msg, requestId }
+    // ── PortraitModal.jsx 頭像／頭像框（跟上面換裝完全獨立，見 @/avatar/engines/portrait.js）──
+    // kind: 'portrait' | 'frame'
+    REQUEST_PREVIEW_COSMETIC: 'avatar:request_preview_cosmetic',             // payload: { kind, itemId }
+    REQUEST_CLEAR_COSMETIC_PREVIEW: 'avatar:request_clear_cosmetic_preview', // payload: { kind }
+    REQUEST_EQUIP_COSMETIC: 'avatar:request_equip_cosmetic',                 // payload: { kind, id }
+    REQUEST_BUY_COSMETIC: 'avatar:request_buy_cosmetic',                     // payload: { kind, id, requestId }
+    BUY_COSMETIC_RESULT: 'avatar:buy_cosmetic_result',                       // payload: { success, msg, requestId }
   },
   Pet: {
     UPDATED: 'pet:updated',

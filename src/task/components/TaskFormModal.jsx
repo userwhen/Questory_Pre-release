@@ -227,7 +227,10 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
     </>
   );
 
-  const CaloriesBlock = (unlocks.feature_cal && form.cat === '運動') ? (
+  // 初版裁切：熱量欄先強制關閉（Settings 的熱量追蹤入口已移除，新存檔不會再有
+  // unlocks.feature_cal）。判斷式本身保留，之後熱量系統要開放時，把 `false &&`
+  // 拿掉就能恢復。
+  const CaloriesBlock = (false && unlocks.feature_cal && form.cat === '運動') ? (
     <div style={{ ...boxStyle, background: 'var(--color-gold-soft)', borderColor: 'var(--color-gold)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-md)' }}>
       <span style={{ fontWeight: 'bold', color: 'var(--color-gold-dark)' }}>{dDict.caloriesLabel}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>

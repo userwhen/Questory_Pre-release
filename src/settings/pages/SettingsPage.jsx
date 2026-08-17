@@ -1,5 +1,5 @@
 /* src/settings/pages/SettingsPage.jsx */
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useGameStore } from '@/core/state.js';
 import { useShallow } from 'zustand/react/shallow';
 import { EventBus } from '@/core/events.js';
@@ -14,27 +14,41 @@ import { Audio } from '@/plugins/audio.js';
 /* ─── Toggle 開關 ────────────────────────────────────────── */
 function Toggle({ checked, onChange, locked }) {
   if (locked) return <span style={lockedBadgeStyle}>🔒 未解鎖</span>;
-  return (
-    <div style={{ width: 'var(--size-md)', height: 'var(--size-xs)', borderRadius: 'var(--radius-full)', background: checked ? 'var(--color-correct, #227A59)' : 'var(--border-input, #d5c5a8)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'var(--t-base)' }}
-         onClick={onChange}>
-      <div style={{ position: 'absolute', width: 'var(--size-xs)', height: 'var(--size-xs)', background: '#fff', borderRadius: '50%', top: 3, left: checked ? 21 : 3, transition: 'var(--t-base)', boxShadow: 'var(--shadow-xs)' }} />
-    </div>
-  );
-}
 
-/* ─── 鎖定功能的解鎖入口：Pro 按鈕＋選配鑽石購買＋成就免費解鎖提示 ───── */
-function FeatureLockActions({ label, shopItem }) {
+  // 將間距提取為常數，統一管理不寫死
+  const TOGGLE_PADDING = 3; 
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-xs)' }}>
-      <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
-        <button style={smallBtnStyle} onClick={() => EventBus.emit(Events.Settings.REQUEST_SHOW_PRO_UPSELL, { label })}>👑 Pro</button>
-        {shopItem && (
-          <button style={smallBtnStyle} onClick={() => EventBus.emit(Events.Settings.REQUEST_BUY_ITEM, { id: shopItem.id })}>
-            💎 {shopItem.price}
-          </button>
-        )}
-      </div>
-      <div style={{ fontSize: 'var(--font-caption)', color: 'var(--text-ghost, #9C7B5B)' }}>🏆 或完成特定成就免費解鎖</div>
+    <div 
+      style={{ 
+        width: 'var(--size-md)', 
+        height: 'var(--size-xs)', 
+        borderRadius: 'var(--radius-full)', 
+        background: checked ? 'var(--color-correct, #227A59)' : 'var(--border-input, #d5c5a8)', 
+        cursor: 'pointer', 
+        flexShrink: 0, 
+        transition: 'var(--t-base)',
+        // 核心 1：用 padding 與 border-box，讓軌道自動向內擠壓空間
+        boxSizing: 'border-box',
+        padding: TOGGLE_PADDING,
+        display: 'flex',
+        alignItems: 'center',
+      }}
+      onClick={onChange}
+    >
+      <div 
+        style={{ 
+          height: '100%', 
+          // 核心 2：自動保持正圓形（寬度永遠 = 高度）
+          aspectRatio: '1 / 1', 
+          background: '#fff', 
+          borderRadius: '50%', 
+          boxShadow: 'var(--shadow-xs)',
+          transition: 'var(--t-base)', 
+          // 核心 3：極致優雅的平移算式（完全不需要扣除 padding）
+          transform: checked ? 'translateX(calc(var(--size-md) - var(--size-xs)))' : 'translateX(0)',
+        }} 
+      />
     </div>
   );
 }
@@ -65,24 +79,23 @@ function SectionTitle({ children }) {
 
 /* ─── 主題商店 Modal ─────────────────────────────────────── */
 function ThemeShopModal({ onClose }) {
-  const { unlocks, settings, subscription } = useGameStore(
+  const { unlocks, settings } = useGameStore(
     useShallow(s => ({
       unlocks: s.unlocks || {},
       settings: s.settings || {},
-      subscription: s.subscription || {},
     }))
   );
 
   const curTheme = settings.theme || 'default';
-  const isPro = !!subscription.active;
 
+  // 初版裁切：Pro限定的「基礎面板」主題先隱藏（theme_config.js 資料原封不動留著，
+  // 等訂閱系統回歸時，只要把 basicItems 這段 UI 加回來就好）。
   const storyItems  = SettingsShopItems.filter(i => i.type === 'theme_story');
-  const basicItems  = SettingsShopItems.filter(i => i.type === 'theme_basic');
 
   const renderThemeCard = item => {
     const themeKey = item.preview;
     const isActive = curTheme === themeKey;
-    const isOwned  = item.currency === 'pro' ? isPro : (item.price === 0 || unlocks[item.id]);
+    const isOwned  = item.price === 0 || unlocks[item.id];
 
     let actionBtn;
     if (isActive) {
@@ -99,7 +112,7 @@ function ThemeShopModal({ onClose }) {
       actionBtn = (
         <button style={{ ...smallBtnStyle }}
           onClick={() => EventBus.emit(Events.Settings.REQUEST_BUY_ITEM, { id: item.id })}>
-          {item.currency === 'pro' ? '👑 Pro' : `💎 ${item.price}`}
+          💎 {item.price}
         </button>
       );
     }
@@ -123,8 +136,6 @@ function ThemeShopModal({ onClose }) {
     <Modal title="🛒 主題商店" onClose={onClose} bodyStyle={{ padding: 'var(--space-sm) var(--space-sm)' }}>
           <SectionTitle>✨ 沉浸世界</SectionTitle>
           {storyItems.map(renderThemeCard)}
-          <SectionTitle>🎨 基礎面板</SectionTitle>
-          {basicItems.map(renderThemeCard)}
           <div style={{ height: 'var(--size-xs)' }} />
     </Modal>
   );
@@ -160,30 +171,13 @@ function ImportModal({ onClose }) {
 
 /* ─── 主頁面 ─────────────────────────────────────────────── */
 export default function SettingsPage() {
-  const { settings, unlocks, subscription } = useGameStore(
+  const { settings } = useGameStore(
     useShallow(s => ({
       settings: s.settings || {},
-      unlocks: s.unlocks || {},
-      subscription: s.subscription || {},
     }))
   );
 
-  const isPro = !!subscription.active;
-
   const [modal, setModal] = useState(null); // 'theme' | 'reset' | 'import'
-  const [calInput, setCalInput] = useState(settings.calMax || 2000);
-  const [lostFeatures, setLostFeatures] = useState(null);
-
-  useEffect(() => EventBus.on(Events.Settings.SUBSCRIPTION_FEATURES_LOST, ({ features }) => {
-    setLostFeatures(features);
-  }), []);
-
-  // 非 Pro 不應保留自訂 BGM（取消訂閱或舊存檔）：強制清掉並退回預設
-  useEffect(() => {
-    if (!isPro && settings.customBGM === 'custom') {
-      Audio.clearCustomBGM();
-    }
-  }, [isPro, settings.customBGM]);
 
   const set = (key, val) => EventBus.emit(Events.Settings.REQUEST_APPLY_SETTINGS, { [key]: val });
 
@@ -193,39 +187,9 @@ export default function SettingsPage() {
     ?? SettingsShopItems.find(i => i.preview === themeKey)?.name
     ?? '⚙️ 預設主題';
 
-  const calUnlocked = !!unlocks.feature_cal || isPro;
-  const strictUnlocked = !!unlocks.feature_strict || isPro;
-
   return (
     <div style={pageStyle}>
       <div style={scrollAreaStyle}>
-
-        {/* ── 訂閱（PRO 保留在 Settings；上方 profile 卡已移至點擊頭像 Modal）── */}
-        <SectionTitle>👑 Pro 訂閱</SectionTitle>
-        <div style={cardStyle}>
-          <SettingRow
-            icon={isPro ? '👑' : '🔓'}
-            label={isPro ? (import.meta.env.DEV ? 'Pro 已啟用（測試模式）' : 'Pro 已啟用') : '尚未訂閱'}
-            hint={isPro ? '熱量追蹤、嚴格模式、專屬主題皆已解鎖' : '訂閱後解鎖熱量追蹤、嚴格模式與專屬主題'}
-          >
-            {/* 這顆按鈕直接免費開通/取消 Pro，只給開發測試用。正式訂閱購買流程
-                （跟 IAP 一起串好之後）要另外做一個真的走金流的入口，
-                不能讓這顆測試按鈕留在正式環境被玩家點到。 */}
-            {import.meta.env.DEV && (
-              <button
-                style={{
-                  ...smallBtnStyle,
-                  background: isPro ? 'var(--color-danger-soft, #fee2e2)' : 'var(--color-gold, #f5a623)',
-                  color: isPro ? 'var(--color-danger, #c0392b)' : '#fff',
-                  border: isPro ? '1px solid var(--color-danger, #c0392b)' : 'none',
-                }}
-                onClick={() => EventBus.emit(Events.Settings.REQUEST_TOGGLE_MOCK_SUB)}
-              >
-                {isPro ? '取消訂閱' : '🧪 開通訂閱'}
-              </button>
-            )}
-          </SettingRow>
-        </div>
 
         {/* ── 外觀主題 ── */}
         <SectionTitle>🎨 外觀主題</SectionTitle>
@@ -271,27 +235,6 @@ export default function SettingsPage() {
               onChange={() => set('mode', settings.mode === 'basic' ? 'adventurer' : 'basic')}
             />
           </SettingRow>
-          <SettingRow icon="🔥" label="卡路里追蹤" hint="記錄每日熱量攝取與消耗">
-            {calUnlocked
-              ? <Toggle checked={!!settings.calMode} onChange={() => set('calMode', !settings.calMode)} />
-              : <FeatureLockActions label="卡路里追蹤" />}
-          </SettingRow>
-          {settings.calMode && (
-            <div style={{ padding: 'var(--space-xs) var(--space-sm)', borderBottom: '1px solid var(--border, rgba(0,0,0,0.09))' }}>
-              <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted, #8c6e52)', marginBottom: 'var(--space-xs)' }}>每日目標 (Kcal)</div>
-              <div style={{ display: 'flex', gap: 'var(--space-xs)', alignItems: 'center' }}>
-                <input type="number" style={{ ...inputStyle, flex: 1, marginBottom: 0 }}
-                  value={calInput} onChange={e => setCalInput(e.target.value)} />
-                <button style={{ ...btnStyle, padding: 'var(--space-xs) var(--space-sm)', fontSize: 'var(--font-body)' }}
-                  onClick={() => EventBus.emit(Events.Settings.REQUEST_SAVE_CAL_TARGET, { value: calInput })}>儲存</button>
-              </div>
-            </div>
-          )}
-          <SettingRow icon="⚡" label="嚴格模式" hint="任務失敗將回收已獲得獎勵">
-            {strictUnlocked
-              ? <Toggle checked={!!settings.strictMode} onChange={() => set('strictMode', !settings.strictMode)} />
-              : <FeatureLockActions label="嚴格模式" />}
-          </SettingRow>
         </div>
 
         {/* ── 音效 ── */}
@@ -311,69 +254,6 @@ export default function SettingsPage() {
                   {Math.round((settings.volume ?? 0.7) * 100)}%
                 </span>
               </div>
-            </div>
-          )}
-
-          <SettingRow icon="🎵" label="背景音樂">
-            <Toggle
-              checked={!!settings.musicEnabled}
-              onChange={() => {
-                const next = !settings.musicEnabled;
-                set('musicEnabled', next);
-                next ? Audio.playGameBGM() : Audio.stopCustomBGM();
-              }}
-            />
-          </SettingRow>
-          {settings.musicEnabled && (
-            <div style={{ padding: 'var(--space-xs) var(--space-sm) var(--space-sm)', borderBottom: '1px solid var(--border, rgba(0,0,0,0.09))' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', marginBottom: 'var(--space-xs)' }}>
-                <span style={{ fontSize: 'var(--font-caption)', color: 'var(--text-muted, #8c6e52)', minWidth: 'var(--size-lg)' }}>音樂音量</span>
-                <input type="range" min={0} max={100} value={Math.round((settings.musicVolume ?? 0.5) * 100)}
-                  onChange={e => { const v = Number(e.target.value) / 100; set('musicVolume', v); Audio.setMusicVolume(v); }}
-                  style={{ flex: 1, accentColor: 'var(--color-gold, #f5a623)' }} />
-                <span style={{ fontSize: 'var(--font-caption)', color: 'var(--text-muted, #8c6e52)', minWidth: 'var(--size-sm)', textAlign: 'right' }}>
-                  {Math.round((settings.musicVolume ?? 0.5) * 100)}%
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 'var(--font-caption)', color: 'var(--text-muted, #8c6e52)' }}>
-                  {isPro
-                    ? (settings.customBGM === 'custom' ? '✅ 已上傳自訂音樂' : '尚未上傳自訂音樂')
-                    : '👑 自訂音樂為 Pro 專屬'}
-                </div>
-                <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
-                  {isPro ? (
-                    <>
-                      {settings.customBGM === 'custom' && (
-                        <button style={smallBtnStyle} onClick={() => Audio.clearCustomBGM()}>清除</button>
-                      )}
-                      <button style={smallBtnStyle} onClick={() => {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.accept = 'audio/*';
-                        input.onchange = e => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          Audio.uploadCustomBGM(file);
-                        };
-                        input.click();
-                      }}>上傳</button>
-                    </>
-                  ) : (
-                    <button
-                      style={smallBtnStyle}
-                      onClick={() => EventBus.emit(Events.Settings.REQUEST_SHOW_PRO_UPSELL, { label: '自訂背景音樂' })}
-                    >
-                      👑 Pro
-                    </button>
-                  )}
-                </div>
-              </div>
-              {isPro && (
-                <div style={{ fontSize: 'var(--font-caption)', color: 'var(--text-ghost, #9C7B5B)', marginTop: 'var(--space-xs)' }}>
-                  💾 自訂音樂會保留在裝置上，重新整理或重開 App 後會自動接續播放（無痕模式等限制儲存的環境除外）
-                </div>
-              )}
             </div>
           )}
 
@@ -474,23 +354,6 @@ export default function SettingsPage() {
         />
       )}
       {modal === 'import' && <ImportModal    onClose={() => setModal(null)} />}
-      {lostFeatures && (
-        <Modal
-          title="⚠️ 訂閱已取消"
-          onClose={() => setLostFeatures(null)}
-          maxWidth={320}
-          footer={<button style={{ ...btnStyle, width: '100%' }} onClick={() => setLostFeatures(null)}>知道了</button>}
-        >
-          <div style={{ fontSize: 'var(--font-body)', color: 'var(--text, #2c1a0e)', marginBottom: 'var(--space-xs)' }}>
-            以下功能因未另外買斷，已一併鎖住：
-          </div>
-          <ul style={{ margin: 0, paddingLeft: 'var(--space-lg)' }}>
-            {lostFeatures.map(f => (
-              <li key={f} style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted, #8c6e52)', marginBottom: 'var(--space-xs)' }}>{f}</li>
-            ))}
-          </ul>
-        </Modal>
-      )}
     </div>
   );
 }

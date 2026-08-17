@@ -12,22 +12,17 @@ import StatsPage from '@/stats/pages/StatsPage.jsx';
 import ShopPage from '@/shop/pages/ShopPage.jsx';
 import SettingsPage from '@/settings/pages/SettingsPage.jsx';
 import AvatarPage from '@/avatar/pages/AvatarPage.jsx';
-import GachaPage from '@/avatar/pages/GachaPage.jsx';
-import { GACHA_ENABLED } from '@/avatar/data/avatar_config.js';
+import PortraitModal from '@/avatar/components/PortraitModal.jsx';
 import ToastManager from '@/ui/ToastManager.jsx';
 import CurrencyShopModal from '@/shop/components/CurrencyShopModal.jsx';
 import HelpModal from '@/ui/HelpModal.jsx';
-import Modal from '@/ui/Modal.jsx';
 import QuickNoteModal from '@/task/components/QuickNoteModal.jsx';
-import { useShallow } from 'zustand/react/shallow';
 
 const FULLSCREEN_PAGES = [];
 
 const FULLSCREEN_BG = {};
 
-const FIXED_PARENTS = {
-  gacha: 'avatar',
-};
+const FIXED_PARENTS = {};
 
 function getRoot(mode) {
   return mode === 'basic' ? 'stats' : 'main';
@@ -46,7 +41,6 @@ function PageRouter({ pageId, onNavigate, onBack, canGoBack, onRegisterBack }) {
     case 'shop':    return <ShopPage />;
     case 'settings':return <SettingsPage />;
     case 'avatar':  return <AvatarPage onNavigate={onNavigate} onBack={onBack} canGoBack={canGoBack} />;
-    case 'gacha':   return GACHA_ENABLED ? <GachaPage /> : <MainPage onNavigate={onNavigate} />;
     case 'profile': return <StatsPage />;
     default:        return <Placeholder pageId={pageId} />;
   }
@@ -79,7 +73,7 @@ export default function GameLayout() {
   const [currencyShopTab, setCurrencyShopTab] = useState(null); // null=關閉，'gem'|'gold'
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showQA, setShowQA] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
+  const [showPortrait, setShowPortrait] = useState(false);
 
   const pageRef = useRef(page);
   pageRef.current = page;
@@ -117,7 +111,7 @@ export default function GameLayout() {
   useOverlayBackHandler('currency-shop-modal', !!currencyShopTab, setCurrencyShopTab, registerBackHandler);
   useOverlayBackHandler('quick-add-modal', showQuickAdd, setShowQuickAdd, registerBackHandler);
   useOverlayBackHandler('qa-modal', showQA, setShowQA, registerBackHandler);
-  useOverlayBackHandler('profile-modal', showProfile, setShowProfile, registerBackHandler);
+  useOverlayBackHandler('portrait-modal', showPortrait, setShowPortrait, registerBackHandler);
 
   // 讓非 HUD 的頁面（未來任何地方）也能透過事件打開貨幣商店，不用一路 prop-drilling
   useEffect(() => {
@@ -136,7 +130,14 @@ export default function GameLayout() {
     if (modeRef.current === 'basic' && pageId === 'main') return;
     setPage(current => (current === pageId ? current : pageId));
   }, []);
-
+// ← 貼在這裡（navigate 定義完成之後）
+  useEffect(() => {
+    const unsub = EventBus.on(Events.System.NAVIGATE, (payload) => {
+      const pageId = typeof payload === 'string' ? payload : payload?.page;
+      if (pageId) navigate(pageId);
+    });
+    return unsub;
+  }, [navigate]);
   const goBack = useCallback(() => {
     if (consumeBack()) return;
     if (pageRef.current === getRoot(modeRef.current)) return;
@@ -209,7 +210,7 @@ export default function GameLayout() {
     <div style={s.frame}>
       {showHud && (
         <HUD
-          onAvatarClick={() => setShowProfile(true)}
+          onAvatarClick={() => setShowPortrait(true)}
           onSettingsClick={() => navigate('settings')}
         />
       )}
@@ -237,50 +238,10 @@ export default function GameLayout() {
       {showQA && (
         <HelpModal onClose={() => setShowQA(false)} onNavigate={(target) => { setShowQA(false); navigate(target); }} />
       )}
-      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
+      {showPortrait && <PortraitModal onClose={() => setShowPortrait(false)} />}
 
       <ToastManager />
     </div>
-  );
-}
-
-/* ─── 點擊頭像：顯示原 Settings 上方玩家資訊卡 ─── */
-function ProfileModal({ onClose }) {
-  const { lv, loginStreak, totalLoginDays } = useGameStore(
-    useShallow(s => ({
-      lv: s.lv || 1,
-      loginStreak: s.loginStreak || 0,
-      totalLoginDays: s.totalLoginDays || 0,
-    }))
-  );
-
-  return (
-    <Modal title="🧙 冒險者資訊" onClose={onClose} maxWidth={320}>
-      <div style={{
-        background: 'var(--bg-hud, #2c1a0e)',
-        borderRadius: 'var(--radius-md)',
-        padding: 'var(--space-xl) var(--space-lg)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 'var(--space-xs)',
-      }}>
-        <div style={{ fontSize: 'var(--size-sm)', marginBottom: 'var(--space-xs)' }}>🧙</div>
-        <div style={{ fontWeight: 800, fontSize: 'var(--font-title)', color: 'var(--text-on-dark, #f5e6cf)' }}>
-          Lv.{lv} 冒險者
-        </div>
-        <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-xs)' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 'var(--font-title)', fontWeight: 800, color: 'var(--color-gold, #f5a623)' }}>{loginStreak}</div>
-            <div style={{ fontSize: 'var(--font-caption)', color: 'rgba(255,255,255,0.5)' }}>連續天數</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 'var(--font-title)', fontWeight: 800, color: 'var(--color-gold, #f5a623)' }}>{totalLoginDays}</div>
-            <div style={{ fontSize: 'var(--font-caption)', color: 'rgba(255,255,255,0.5)' }}>累計登入</div>
-          </div>
-        </div>
-      </div>
-    </Modal>
   );
 }
 

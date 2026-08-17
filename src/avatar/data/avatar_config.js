@@ -114,28 +114,6 @@ export const AvatarShop = [
   { id: 'furn_bed', name: '舒適小床', price: 300, type: 'furniture', size: 'L', icon: '🛌', imgId: 'furn_bed', rarity: 'SR' }
 ];
 
-// 扭蛋池：只抽 avatar 外觀商品（有價格、非集齊解鎖）
-// 不含 data.js 商店消耗品；免費起始物與 requires 集齊物不進池
-export const GachaPool = [
-  // 只抽 avatar 外觀：有價格、非集齊解鎖；不含 data.js 消耗品與舊扭蛋專屬
-  ...AvatarShop.filter(i => (i.price ?? 0) > 0 && !(i.requires?.length)),
-];
-
-// 初版功能開關：扭蛋機在初版先關閉（GachaPool 內容跟 AvatarShop 完全重疊，
-// 關閉不會少任何內容，等品項/道具池決定好之後再打開）。
-// 只有這一個開關要改，AvatarPage.jsx 的入口按鈕跟 GameLayout.jsx 的路由都吃這裡。
-export const GACHA_ENABLED = true;
-
-export const GachaConfig = {
-  singleCost:  50,                        // 單抽鑽石費用
-  tenCost:     Math.floor(50 * 10 * 0.9), // 十連 9 折
-  pityLimit:   50,                        // 保底抽數
-  rates: {
-    SSR: 0.03,
-    SR:  0.12,
-    R:   0.85,
-  },
-};
 // 角色立繪查找用
 export const ALL_ITEMS = [...AvatarShop];
 

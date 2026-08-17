@@ -21,12 +21,7 @@ import { useRequestAction } from '@/hooks/useRequestAction.js';
 // 3. UI 元件與樣式 (Components & Styles)
 import Modal from '@/ui/Modal.jsx';
 import { btnStyle, inputStyle, labelStyle } from '@/styles/modalStyles.js';
-import { 
-  pageStyle, 
-  scrollAreaStyle, 
-  segBtnStyle, 
-  segmentWrapStyle 
-} from '@/task/components/TaskStyles.js'; // ⚠️ 已根據你的目錄結構修正路徑
+import { pageStyle, scrollAreaStyle } from '@/task/components/TaskStyles.js'; // ⚠️ 已根據你的目錄結構修正路徑
 
 // Chart.js 註冊
 Chart.register(RadarController, RadialLinearScale, PointElement, LineElement, Filler, Tooltip);
@@ -160,7 +155,6 @@ export default function StatsPage() {
   const lv             = useGameStore(s => s.lv             || 1);
   const exp            = useGameStore(s => s.exp             || 0);
 
-  const [tab, setTab] = useState('attr');
   const [skillModal, setSkillModal] = useState(null); // null | { editId, name, parent, skill }
 
   const expPct = Math.min(100, Math.round((exp / (lv * 100)) * 100));
@@ -170,30 +164,13 @@ export default function StatsPage() {
 
   return (
     <div style={pageStyle}>
-      {/* ── 分頁切換：跟 TaskPage 共用同一份樣式（segmentWrapStyle/segBtnStyle），
-             位置、間距、pill 尺寸完全一致，跟 task 來回切換不會跳動 ── */}
-      <div style={segmentWrapStyle}>
-        {[['attr', '● 能力分析'], ['cal', '● 熱量監控']].map(([val, label]) => (
-          <button key={val}
-            style={{ ...segBtnStyle, background: tab === val ? 'var(--color-correct, #227A59)' : 'transparent', color: tab === val ? '#fff' : 'var(--text-muted, #8c6e52)' }}
-            onClick={() => setTab(val)}
-          >{label}</button>
-        ))}
-      </div>
-
-      {/* ── 雷達圖/熱量卡 ── */}
+      {/* ── 雷達圖 ── */}
       <div style={{ flexShrink: 0, padding: 'var(--space-xs) var(--space-md)' }}>
-        {tab === 'attr' ? (
-          <RadarChart attrs={attrs} />
-        ) : (
-          <CalCard />
-        )}
+        <RadarChart attrs={attrs} />
       </div>
 
       {/* ── 內容區 ── */}
       <div style={scrollAreaStyle}>
-        {tab === 'attr' ? (
-          <>
             {/* 屬性格子 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-xs)', marginBottom: 'var(--space-lg)' }}>
               {Object.values(attrs).map(a => {
@@ -259,143 +236,11 @@ export default function StatsPage() {
             )}
 
             <div style={{ height: 'var(--size-xl)' }} />
-          </>
-        ) : (
-          <CalLogList />
-        )}
       </div>
 
       {skillModal && (
         <SkillModal initial={skillModal} attrs={attrs} onClose={() => setSkillModal(null)} />
       )}
-    </div>
-  );
-}
-
-function CalCard() {
-  const cal = useGameStore(s => s.cal || { today: 0, logs: [] });
-  const settings = useGameStore(s => s.settings || {});
-  const maxCal = settings.calMax || 2000;
-  const consumed = Math.max(0, cal.today || 0);
-  const consumedPct = Math.min(100, Math.round((consumed / maxCal) * 100));
-
-  const [punchMode, setPunchMode] = useState(false);
-  const [truth, setTruth] = useState(null);
-  const [popping, setPopping] = useState(null);
-  const { run, loading } = useRequestAction();
-
-  useEffect(() => {
-    const unsub = EventBus.on(Events.Stats.CALORIE_TRUTH_READY, setTruth);
-    EventBus.emit(Events.Stats.REQUEST_CALORIE_TRUTH);
-    return unsub;
-  }, [cal]);
-
-  const quota = truth?.quota || 0;
-  const burned = truth?.burned || 0;
-  const balls = truth?.balls || [];
-  const burnPct = burned > 0 ? Math.round((quota / burned) * 100) : 0;
-
-  const handlePunch = (ball, idx) => {
-    if (!punchMode || loading) return;
-    run(Events.Stats.REQUEST_POP_BALL, Events.Stats.POP_BALL_RESULT,
-      { amount: ball.kcal },
-      {
-        showFailToast: false,
-        onSuccess: () => { setPopping(idx); setTimeout(() => setPopping(null), 300); },
-      }
-    );
-  };
-
-  return (
-    <div style={{
-      position: 'relative', minHeight: 170, borderRadius: 'var(--radius-md)', overflow: 'hidden',
-      border: '1px solid var(--border, rgba(0,0,0,0.09))',
-      background: punchMode ? 'rgba(192,57,43,0.08)' : 'var(--bg-card, #fff)',
-      transition: 'background var(--t-slow)', padding: 'var(--space-md)',
-    }}>
-      <button
-        onClick={() => setPunchMode(v => !v)}
-        disabled={balls.length === 0 && !punchMode}
-        title={punchMode ? '結束打擊' : '打擊熱量'}
-        style={{
-          position: 'absolute', top: 12, right: 12, width: 'var(--size-sm)', height: 'var(--size-sm)', borderRadius: '50%',
-          border: `2px solid ${punchMode ? '#fff' : 'var(--border, rgba(0,0,0,0.09))'}`,
-          background: punchMode ? 'var(--color-danger, #c0392b)' : 'var(--bg-box, rgba(0,0,0,0.045))',
-          fontSize: 'var(--font-title)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: 'var(--shadow-sm, 0 2px 6px rgba(0,0,0,0.09))', zIndex: 2,
-        }}
-      >{punchMode ? '❌' : '🥊'}</button>
-
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 'var(--font-body)', fontWeight: 700, marginBottom: 'var(--space-xs)', color: punchMode ? 'var(--color-danger, #c0392b)' : 'var(--text-muted, #8c6e52)' }}>
-          {punchMode ? '🥊 今日可燃燒（運動任務獲得）' : '今日已攝取（未燃燒）'}
-        </div>
-        <div style={{ fontSize: 'var(--size-sm)', fontWeight: 900, lineHeight: 1, marginBottom: 'var(--space-xs)', color: punchMode ? 'var(--color-danger, #c0392b)' : 'var(--text, #2c1a0e)' }}>
-          {punchMode
-            ? <>{quota} <span style={{ fontSize: 'var(--font-title)' }}>kcal</span></>
-            : <>{consumed} <span style={{ fontSize: 'var(--font-title)', color: 'var(--text-ghost, #9C7B5B)' }}>/ {maxCal}</span></>
-          }
-        </div>
-        <div style={{ width: '75%', margin: '0 auto' }}>
-          <ProgressBar
-            pct={punchMode ? burnPct : consumedPct}
-            text={punchMode ? `${quota} kcal 額度` : `${consumed} kcal`}
-            color={punchMode ? 'var(--color-danger, #c0392b)' : (consumedPct > 80 ? 'var(--color-danger, #c0392b)' : 'var(--color-correct, #227A59)')}
-          />
-        </div>
-      </div>
-
-      {punchMode && (
-        balls.length === 0 ? (
-          <div style={{ marginTop: 'var(--space-sm)', fontSize: 'var(--font-body)', color: 'var(--text-ghost, #9C7B5B)', textAlign: 'center' }}>
-            目前沒有熱量球，去運動任務賺點燃燒額度，或吃點東西吧！
-          </div>
-        ) : (
-          <div style={{ marginTop: 'var(--space-sm)', display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)', justifyContent: 'center' }}>
-            {balls.map((ball, idx) => (
-              <button
-                key={idx}
-                onClick={() => handlePunch(ball, idx)}
-                title={`${ball.kcal} kcal`}
-                style={{
-                  width: ball.radius * 2, height: ball.radius * 2, borderRadius: '50%',
-                  border: '1.5px solid var(--color-danger, #c0392b)', background: 'var(--bg-card, #fff)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: ball.radius * 0.9, cursor: 'pointer',
-                  transform: popping === idx ? 'scale(0)' : 'scale(1)', opacity: popping === idx ? 0 : 1,
-                  transition: 'transform var(--t-slow) ease, opacity var(--t-slow) ease',
-                }}
-              >{ball.emoji}</button>
-            ))}
-          </div>
-        )
-      )}
-    </div>
-  );
-}
-
-function CalLogList() {
-  const logs = useGameStore(s => s.cal?.logs || []);
-  return (
-    <div style={{ paddingBottom: 80 }}>
-      {logs.length === 0 ? (
-        <div style={emptyStyle}>
-          <div style={{ fontSize: 'var(--size-sm)', marginBottom: 'var(--space-xs)' }}>🍽️</div>
-          <div style={{ fontWeight: 700 }}>尚無紀錄</div>
-        </div>
-      ) : logs.map((l, i) => {
-        const match = l.match(/([+-]?\d+)$/);
-        const val = match ? parseInt(match[1]) : 0;
-        const text = l.replace(/([+-]?\d+)$/, '').trim();
-        return (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-sm) 0', borderBottom: '1px dashed var(--border, rgba(0,0,0,0.09))' }}>
-            <span style={{ color: 'var(--text-2, #5c3d2e)', fontSize: 'var(--font-body)' }}>{text}</span>
-            <span style={{ fontWeight: 700, color: val <= 0 ? 'var(--color-correct, #227A59)' : 'var(--color-danger, #c0392b)' }}>
-              {val > 0 ? '+' : ''}{val}
-            </span>
-          </div>
-        );
-      })}
     </div>
   );
 }

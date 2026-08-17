@@ -17,6 +17,7 @@ import { Ads } from '@/plugins/ads.js';
 import { RewardEngine } from '@/reward/engines/reward.js';
 import { AvatarEngine } from '@/avatar/engines/avatar.js';
 import { SettingsEngine } from '@/settings/engines/settings.js';
+import { StageEngine } from '@/main-stage/Engines/stage.js';
 
 // 初版裁切：不 init 的引擎（保留檔案，之後要開回來只要把 import + init 加回來）
 //   StoryBridge / narrativeEngine  — Story 全系統
@@ -49,6 +50,13 @@ function Root() {
     StatsEngine.init();
     AchEngine.init();
     ShopEngine.init();
+    StageEngine.init();
+        // 大廳主角長按 → 開啟數值頁（MainPage 只 emit，不直接 navigate）
+    const unsubCharLongPress = EventBus.on(Events.Stage.ENTITY_LONG_PRESS, ({ id, type }) => {
+      if (id === 'main' || type === 'character') {
+        EventBus.emit(Events.System.NAVIGATE, { page: 'stats' });
+      }
+    });
     TaskEngine.init();
     Audio.init();
     Notification.init();
@@ -76,6 +84,7 @@ function Root() {
 
     return () => {
       unsubReset();
+      unsubCharLongPress();
     };
   }, []);
 

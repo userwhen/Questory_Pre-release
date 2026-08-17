@@ -2,7 +2,8 @@
 import { getState, setState } from '@/core/state.js';
 import { EventBus, makeIdempotentInit } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
-import { AvatarShop, GachaPool, GachaConfig, checkAttrGate, passesAttrGate } from '@/avatar/data/avatar_config.js';
+import { AvatarShop, checkAttrGate } from '@/avatar/data/avatar_config.js';
+import { previewCosmetic, clearCosmeticPreview, equipCosmetic, buyCosmetic, checkMilestones } from '@/avatar/engines/portrait.js';
 
 export const AvatarEngine = {
 
@@ -22,13 +23,6 @@ export const AvatarEngine = {
     });
     EventBus.emit(Events.Avatar.UPDATED);
 
-    const unsubGacha = EventBus.on(Events.Avatar.REQUEST_GACHA, ({ times, requestId }) => {
-      const results = this.executeGacha(times);
-      EventBus.emit(Events.Avatar.GACHA_RESULT, { results, requestId });
-    });
-    const unsubCraft = EventBus.on(Events.Avatar.REQUEST_CRAFT_TICKET, () => {
-      this.craftGachaTicket();
-    });
     const unsubPreview = EventBus.on(Events.Avatar.REQUEST_PREVIEW_ITEM, ({ itemId, type }) => {
       this.previewItem(itemId, type);
     });
@@ -43,13 +37,42 @@ export const AvatarEngine = {
       EventBus.emit(Events.Avatar.BUY_ITEM_RESULT, { ...result, requestId });
     });
 
-    return [unsubGacha, unsubCraft, unsubPreview, unsubClearPreview, unsubWear, unsubBuy];
+     // ── 頭像／頭像框：完全轉呼叫 portrait.js，這裡只負責事件註冊，不碰任何內部邏輯 ──
+    //    之後要拆成獨立 Engine，搬走這幾行監聽器就好，portrait.js 完全不用改。
+    const unsubCosmeticPreview = EventBus.on(Events.Avatar.REQUEST_PREVIEW_COSMETIC, ({ kind, itemId }) => {
+      previewCosmetic(kind, itemId);
+    });
+    const unsubCosmeticClearPreview = EventBus.on(Events.Avatar.REQUEST_CLEAR_COSMETIC_PREVIEW, ({ kind }) => {
+      clearCosmeticPreview(kind);
+    });
+    const unsubCosmeticEquip = EventBus.on(Events.Avatar.REQUEST_EQUIP_COSMETIC, ({ kind, id }) => {
+      equipCosmetic(kind, id);
+    });
+    const unsubCosmeticBuy = EventBus.on(Events.Avatar.REQUEST_BUY_COSMETIC, ({ kind, id, requestId }) => {
+      const result = buyCosmetic(kind, id);
+      EventBus.emit(Events.Avatar.BUY_COSMETIC_RESULT, { ...result, requestId });
+    });
+    const unsubCosmeticLevelUp = EventBus.on(Events.Stats.LEVEL_UP, () => {
+      checkMilestones();
+    });
+    const unsubCosmeticDailyReset = EventBus.on(Events.System.DAILY_RESET, () => {
+      checkMilestones();
+    });
+
+    // 立即補跑一次：確保「功能上線前就已經達標」的老玩家馬上拿到，不用等下一次升級/換日才觸發
+    checkMilestones();
+
+    return [
+      unsubPreview, unsubClearPreview, unsubWear, unsubBuy,
+      unsubCosmeticPreview, unsubCosmeticClearPreview, unsubCosmeticEquip, unsubCosmeticBuy,
+      unsubCosmeticLevelUp, unsubCosmeticDailyReset,
+    ];
   }),
 
   // ─── 預覽（只寫 previewWearing，不存檔）─────────────
   previewItem(itemId, category) {
     if (!category) {
-      const item = [...AvatarShop, ...GachaPool].find(i => i.id === itemId);
+      const item = AvatarShop.find(i => i.id === itemId);
       category = item?.type ?? 'suit';
     }
 
@@ -70,7 +93,7 @@ export const AvatarEngine = {
   // ─── 穿上 / 卸下 ────────────────────────────────────
   wearItem(itemId, category) {
     if (!category) {
-      const item = [...AvatarShop, ...GachaPool].find(i => i.id === itemId);
+      const item = AvatarShop.find(i => i.id === itemId);
       category = item?.type ?? 'suit';
     }
 
@@ -214,154 +237,6 @@ export const AvatarEngine = {
     });
 
     EventBus.emit(Events.Avatar.UPDATED);
-  },
-
-  // ─── 扭蛋抽卡 ────────────────────────────────────────
-  executeGacha(times = 1) {
-    const s = getState();
-    const totalGem = (s.freeGem ?? 0) + (s.paidGem ?? 0);
-
-    let currentBag = [...(s.bag ?? [])];
-    const ticketIdx = currentBag.findIndex(i => i.id === 'sys_misc_gacha_ticket');
-    const ticketCount = ticketIdx > -1 ? currentBag[ticketIdx].count : 0;
-
-    // 券優先：先扣券，不足次數用鑽補。
-    // 優惠只在「全鑽十連」：混券時不足部分按單抽價計。
-    const useTickets = Math.min(ticketCount, times);
-    const remain = times - useTickets;
-    let gemNeeded = 0;
-    if (remain > 0) {
-      if (useTickets === 0 && times === 10) {
-        gemNeeded = GachaConfig.tenCost; // 全鑽十連優惠
-      } else {
-        gemNeeded = remain * GachaConfig.singleCost;
-      }
-    }
-
-    if (gemNeeded > 0 && totalGem < gemNeeded) {
-      EventBus.emit(
-        Events.System.TOAST,
-        useTickets > 0
-          ? `💎 鑽石不足（已用 ${useTickets} 券，還需 ${gemNeeded} 鑽）`
-          : `💎 資源不足（需 ${gemNeeded} 鑽 或 ${times} 張券）`
-      );
-      return null;
-    }
-
-    if (useTickets > 0 && ticketIdx > -1) {
-      currentBag[ticketIdx] = {
-        ...currentBag[ticketIdx],
-        count: currentBag[ticketIdx].count - useTickets,
-      };
-    }
-
-    let currentFreeGem = s.freeGem ?? 0;
-    let currentPaidGem = s.paidGem ?? 0;
-    if (gemNeeded > 0) {
-      const fd = Math.min(gemNeeded, currentFreeGem);
-      currentFreeGem -= fd;
-      currentPaidGem = Math.max(0, currentPaidGem - (gemNeeded - fd));
-    }
-
-    const results = [];
-    let currentUnlocked = [...(s.avatar?.unlocked ?? [])];
-    let pity = s.gachaPity ?? 0;
-
-    // 依當前屬性過濾扭蛋池：未達 reqAttr 的商品不進池（公平、不抽到不能穿的）
-    const attrs = s.attrs || {};
-    const eligiblePool = GachaPool.filter(item => passesAttrGate(item, attrs));
-    // 若全部被濾掉（極端情況），退回無門檻商品，避免空池崩潰
-    const safePool = eligiblePool.length > 0
-      ? eligiblePool
-      : GachaPool.filter(item => !item.reqAttr);
-    const drawPool = safePool.length > 0 ? safePool : GachaPool;
-
-    for (let i = 0; i < times; i++) {
-      pity++;
-      const roll = Math.random();
-      let rarity = 'R';
-
-      if (pity >= GachaConfig.pityLimit) {
-        rarity = 'SSR';
-        pity = 0;
-      } else if (roll < GachaConfig.rates.SSR) {
-        rarity = 'SSR';
-        pity = 0;
-      } else if (roll < GachaConfig.rates.SSR + GachaConfig.rates.SR) {
-        rarity = 'SR';
-      }
-
-      const pool = drawPool.filter(item => item.rarity === rarity);
-      const picked = pool.length > 0
-        ? pool[Math.floor(Math.random() * pool.length)]
-        : drawPool[Math.floor(Math.random() * drawPool.length)];
-
-      const isNew = !currentUnlocked.includes(picked.id);
-      results.push({ ...picked, isNew });
-
-      if (isNew) {
-        currentUnlocked.push(picked.id);
-      } else {
-        const fragIdx = currentBag.findIndex(b => b.id === 'sys_gacha_fragment');
-        if (fragIdx > -1) {
-          currentBag[fragIdx] = {
-            ...currentBag[fragIdx],
-            count: currentBag[fragIdx].count + 1,
-          };
-        } else {
-          currentBag.push({ id: 'sys_gacha_fragment', count: 1 });
-        }
-      }
-    }
-
-    setState(prev => ({
-      freeGem: currentFreeGem,
-      paidGem: currentPaidGem,
-      bag: currentBag,
-      avatar: { ...prev.avatar, unlocked: currentUnlocked },
-      gachaPity: pity,
-    }));
-
-    this._checkSetRewards?.();
-    EventBus.emit(Events.Avatar.UPDATED);
-
-    return results;
-  },
-
-  // ─── 碎片合成抽獎券 ──────────────────────────────────
-  craftGachaTicket() {
-    const s = getState();
-    const bag = [...(s.bag ?? [])];
-    const fragIdx = bag.findIndex(i => i.id === 'sys_gacha_fragment');
-
-    if (fragIdx === -1 || bag[fragIdx].count < 10) {
-      EventBus.emit(Events.System.TOAST, '❌ 碎片不足 10 個，無法合成喔！');
-      return null;
-    }
-
-    const craftCount = Math.floor(bag[fragIdx].count / 10);
-    const remainder = bag[fragIdx].count % 10;
-
-    if (remainder > 0) {
-      bag[fragIdx] = { ...bag[fragIdx], count: remainder };
-    } else {
-      bag.splice(fragIdx, 1);
-    }
-
-    const ticketIdx = bag.findIndex(i => i.id === 'sys_misc_gacha_ticket');
-    if (ticketIdx > -1) {
-      bag[ticketIdx] = {
-        ...bag[ticketIdx],
-        count: bag[ticketIdx].count + craftCount,
-      };
-    } else {
-      bag.push({ id: 'sys_misc_gacha_ticket', count: craftCount });
-    }
-
-    setState(() => ({ bag }));
-    EventBus.emit(Events.System.TOAST, `✨ 成功將碎片合成為 ${craftCount} 張抽獎券！`);
-    EventBus.emit(Events.Avatar.UPDATED);
-    return craftCount;
   },
 
   // ─── 取得渲染用穿著資料 ──────────────────────────────

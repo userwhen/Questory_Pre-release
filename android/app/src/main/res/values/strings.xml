@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Questory</string>
+    <string name="app_name">Questory_P</string>
     <string name="title_activity_main">Questory</string>
     <string name="package_name">com.questory.app</string>
     <string name="custom_url_scheme">com.questory.app</string>

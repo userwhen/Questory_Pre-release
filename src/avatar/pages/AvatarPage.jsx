@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useGameStore } from '@/core/state.js';
 import { EventBus, EventHelper } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
-import { AvatarShop, ALL_ITEMS, checkAttrGate, GACHA_ENABLED } from '@/avatar/data/avatar_config.js';
+import { AvatarShop, ALL_ITEMS, checkAttrGate } from '@/avatar/data/avatar_config.js';
 import CharacterSprite from '@/ui/CharacterSprite.jsx';
 
 // ─── AvatarStage ──────────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ function WardrobeCard({ item, isWearing, isUnlocked, attrs, onWear, onBuy }) {
             {shopConfig.price > 0 ? `💎${shopConfig.price}` : '免費領取'}
           </button>
         ) : (
-          <button style={{ ...wardrobeBtnStyle, opacity: 0.55, cursor: 'not-allowed' }} disabled>🎡 扭蛋</button>
+          <button style={{ ...wardrobeBtnStyle, opacity: 0.55, cursor: 'not-allowed' }} disabled>🔒 尚未開放</button>
         )}
       </div>
     </div>
@@ -178,22 +178,8 @@ export default function AvatarPage({ onNavigate }) {
   const [tab, setTab] = useState('suit');
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      window.cheatGacha = (gem = 50000, tickets = 50) => {
-        useGameStore.setState(s => {
-          const bag = [...(s.bag || [])];
-          const tIdx = bag.findIndex(i => i.id === 'sys_misc_gacha_ticket');
-          if (tIdx > -1) bag[tIdx] = { ...bag[tIdx], count: bag[tIdx].count + tickets };
-          else bag.push({ id: 'sys_misc_gacha_ticket', count: tickets });
-          return { freeGem: (s.freeGem || 0) + gem, bag };
-        });
-        console.log(`💎 作弊：+${gem} 鑽石, +${tickets} 券`);
-      };
-    }
-
     return () => {
       EventBus.emit(Events.Avatar.REQUEST_CLEAR_PREVIEW);
-      if (import.meta.env.DEV) delete window.cheatGacha;
     };
   }, []);
 
@@ -260,9 +246,6 @@ export default function AvatarPage({ onNavigate }) {
     <div style={pageStyle}>
       <div style={stageStyle}>
         <div style={modeColStyle}>
-          {GACHA_ENABLED && (
-            <button style={modeBtnStyle} onClick={() => onNavigate('gacha')}>🎰</button>
-          )}
           {[['avatar', '👗'], ['decor', '🖼️']].map(([m, icon]) => (
             <button key={m}
               style={{ ...modeBtnStyle, borderColor: modeBtnActive(m) ? 'var(--color-gold,#f5a623)' : 'var(--border,rgba(0,0,0,0.09))', background: modeBtnActive(m) ? 'rgba(245,166,35,0.12)' : 'var(--bg-card,#fff)' }}

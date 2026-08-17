@@ -6,11 +6,11 @@ import { Ads } from '@/plugins/ads.js';
 // 廣告 SDK 還沒接上前先顯示佔位卡片：一來讓版面先留好、量測會不會跟
 // 旁邊按鈕靠太近容易誤觸，二來 SDK 接上後只要換掉這個元件內部就好，
 // 呼叫端（例如 ShopPage.jsx）完全不用改。
-export default function AdBanner({ placementId }) {
+export default function AdBanner({ placementId, label = '廣告版位（尚未串接）', style }) {
   if (!Ads.shouldShowAds()) return null;
   return (
-    <div style={s.wrap}>
-      <span style={s.label}>廣告版位（尚未串接）</span>
+    <div style={{ ...s.wrap, ...style }}>
+      <span style={s.label}>{label}</span>
     </div>
   );
 }

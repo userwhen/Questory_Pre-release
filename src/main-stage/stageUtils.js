@@ -1,4 +1,4 @@
-// src/main-stage/stage.js
+// src/main-stage/stageUtils.js
 import { createContext, useContext } from 'react';
 
 export const StageContext = createContext({

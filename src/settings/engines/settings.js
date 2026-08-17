@@ -18,10 +18,8 @@ export const SettingsEngine = {
     const unsubExport = EventBus.on(Events.Settings.REQUEST_EXPORT_SAVE,    () => this.exportSave());
     const unsubImport = EventBus.on(Events.Settings.REQUEST_IMPORT_SAVE,    ({ file }) => this.importSave(file));
     const unsubReset  = EventBus.on(Events.Settings.REQUEST_PERFORM_RESET,  () => this.performReset());
-    const unsubMockSub = EventBus.on(Events.Settings.REQUEST_TOGGLE_MOCK_SUB, () => this.toggleMockSubscription());
-    const unsubProUpsell = EventBus.on(Events.Settings.REQUEST_SHOW_PRO_UPSELL, ({ label }) => this.showProUpsell(label));
 
-    return [unsubTheme, unsubBuy, unsubToggle, unsubApply, unsubCal, unsubExport, unsubImport, unsubReset, unsubMockSub, unsubProUpsell];
+    return [unsubTheme, unsubBuy, unsubToggle, unsubApply, unsubCal, unsubExport, unsubImport, unsubReset];
   }),
 
   // ─── 主題套用 ─────────────────────────────────────────────
@@ -72,16 +70,11 @@ saveCalTarget(val) {
     const item = SettingsShopItems.find(i => i.id === itemId);
     if (!item) return;
 
-    // 主題類：theme_story 用鑽石購買；theme_basic 系列 currency 是 'pro'，改成看訂閱狀態
+    // 主題類：theme_story 用鑽石購買；theme_basic 系列 currency 是 'pro'
+    // 初版裁切：訂閱系統已移除，這批主題先保留資料但不開放購買，等訂閱回歸再開放。
     if (item.type.startsWith('theme')) {
       if (item.currency === 'pro') {
-        if (!s.subscription?.active) {
-          EventBus.emit(Events.System.TOAST, '👑 需要訂閱 Pro 才能使用此主題');
-          return;
-        }
-        // Pro 訂閱期間直接套用；不寫入 unlocks，訂閱到期後會自動再次鎖定
-        const themeKey = item.preview || item.id.replace('theme_', '').replace('basic_', 'basic-');
-        this.applyTheme(themeKey);
+        EventBus.emit(Events.System.TOAST, '🔒 此主題尚未開放');
         return;
       }
       if (item.price > 0) {
@@ -208,45 +201,4 @@ saveCalTarget(val) {
     window.location.reload();
   },
 
-  // ─── 測試訂閱（TODO：串接真正 IAP 後，這裡應改成付款成功才呼叫，不能再讓 UI 直接觸發切換）─────
-  // 關閉訂閱前，先算出「只靠 isPro bypass、沒有另外买断」會被一併鎖住的功能：
-  // 卡路里/嚴格模式目前沒有买断管道（之後由新手任務/成就系統贈送 unlocks），
-  // 只要 unlocks 裡沒有對應 key，這次關閉訂閱就會讓它鎖回去，要列進提醒清單。
-  toggleMockSubscription() {
-    const s = getState();
-    const next = !(s.subscription?.active);
-
-    if (!next) {
-      const unlocks = s.unlocks || {};
-      const FEATURE_LABELS = {
-        feature_cal: '🔥 卡路里追蹤',
-        feature_strict: '⚡ 嚴格模式',
-      };
-      const lost = Object.entries(FEATURE_LABELS)
-        .filter(([key]) => !unlocks[key])
-        .map(([, label]) => label);
-
-      if (lost.length > 0) {
-        EventBus.emit(Events.Settings.SUBSCRIPTION_FEATURES_LOST, { features: lost });
-      }
-    }
-
-    setState(st => ({
-      subscription: {
-        ...(st.subscription || {}),
-        active: next,
-        mock: true,
-        sku: next ? 'mock_pro' : null,
-        startedAt: next ? Date.now() : (st.subscription?.startedAt ?? null),
-      },
-    }));
-    EventBus.emit(Events.Settings.UPDATED);
-    EventBus.emit(Events.System.TOAST, next ? '🧪 測試訂閱已開啟（Pro 功能已解鎖）' : '測試訂閱已關閉');
-  },
-
-  // ─── 鎖定功能列的 Pro 按鈕。目前先跳 Toast；之後想做②的「Pro 介紹頁」時，
-  //     只要把這個方法內部換成打開 Modal，呼叫端（SettingsPage）完全不用動 ──
-  showProUpsell(label) {
-    EventBus.emit(Events.System.TOAST, `👑 需訂閱 Pro 才能解鎖「${label}」`);
-  },
 };
