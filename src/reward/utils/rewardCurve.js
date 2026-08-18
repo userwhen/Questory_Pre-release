@@ -30,3 +30,22 @@ export function rollRewardAmount(w) {
   const { min, max } = getRewardRange(w);
   return Math.floor(min + Math.random() * (max - min + 1));
 }
+
+/** 免費鑽石掉落機率：約 1%～8%，隨 weight 曲線上升（比金幣券更稀有） */
+export function getFreeGemDropChance(w) {
+  const curve = Math.pow(normalizedWeight(w), CURVE_EXPONENT);
+  return 0.01 + 0.07 * curve; // 1% ~ 8%
+}
+
+/**
+ * 骰免費鑽石數量。
+ * - 先依機率決定有沒有掉（可為 0）
+ * - 有掉到時基準 1～2（高權重較易到 2），再乘 enchantMultiplier 後四捨五入，至少 1
+ */
+export function rollFreeGemAmount(w, enchantMultiplier = 1) {
+  if (Math.random() >= getFreeGemDropChance(w)) return 0;
+  const curve = Math.pow(normalizedWeight(w), CURVE_EXPONENT);
+  // 高權重較容易骰到 2
+  const base = Math.random() < (0.25 + 0.5 * curve) ? 2 : 1;
+  return Math.max(1, Math.round(base * (enchantMultiplier ?? 1)));
+}

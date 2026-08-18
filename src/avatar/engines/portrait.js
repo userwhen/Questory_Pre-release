@@ -20,13 +20,8 @@ function resolveTable(kind) {
 // ─── 預覽（只寫 previewPortrait/previewFrame，不存檔）─────────────
 export function previewCosmetic(kind, itemId) {
   const previewKey = kind === 'portrait' ? 'previewPortrait' : 'previewFrame';
-
-  if (itemId && itemId !== NONE_COSMETIC) {
-    const { unlockedKey } = resolveTable(kind);
-    const unlocked = getState().avatar?.[unlockedKey] ?? [];
-    if (!unlocked.includes(itemId)) return; // 還沒擁有的不給預覽
-  }
-
+  // 預覽不檢查擁有狀態：讓玩家在購買/解鎖前也能先看外觀決定要不要，是刻意的設計，
+  // 比照 AvatarEngine.previewItem 對換裝道具的做法，兩邊保持一致不做擁有限制。
   setState(() => ({ [previewKey]: itemId ?? null }));
   EventBus.emit(Events.Avatar.UPDATED);
 }

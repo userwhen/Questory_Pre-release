@@ -1,10 +1,15 @@
 /* src/reward/engines/reward.js */
 // 任務完成獎勵的骰值引擎：只做一件事——收到 REQUEST_ROLL 就骰一組
-// gold/exp/coupon 回傳。曲線公式在 utils/rewardCurve.js（跟
+// gold/exp/coupon/freeGem 回傳。曲線公式在 utils/rewardCurve.js（跟
 // TaskFormModal.jsx 的預覽共用同一份，數字不會兩邊對不上）。
 import { EventBus, makeIdempotentInit } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
-import { getRewardWeight, rollRewardAmount, getCouponDropChance } from '@/reward/utils/rewardCurve.js';
+import {
+  getRewardWeight,
+  rollRewardAmount,
+  getCouponDropChance,
+  rollFreeGemAmount,
+} from '@/reward/utils/rewardCurve.js';
 
 export const RewardEngine = {
   init: makeIdempotentInit(function () {
@@ -16,12 +21,15 @@ export const RewardEngine = {
       // 只骰一次基準值，乘上 combo/祝福加成
       const amount = Math.round(rollRewardAmount(w) * mult);
       const coupon = Math.random() < getCouponDropChance(w);
+      // 鑽石：機率不吃祝福（較單純）；有掉到時的數量吃祝福倍率
+      const freeGem = rollFreeGemAmount(w, enchantMultiplier ?? 1);
 
       EventBus.emit(Events.Reward.ROLL_RESULT, {
         requestId,
         gold: amount,
         exp: amount,
         coupon,
+        freeGem,
       });
     });
 

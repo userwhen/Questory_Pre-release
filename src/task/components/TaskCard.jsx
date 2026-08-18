@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import {
   cardStyle, checkStyle, catPillStyle,
   cardZoneLeftStyle, cardZoneRightStyle, cardMiddleZoneStyle, cardHeaderStyle, cardExpandedStyle,
@@ -20,28 +20,26 @@ function describeRecurrence(recurrence) {
 }
 // ===============================
 
-// ── 三分區架構：左（完成/勾選）、中（標題列＋展開內容）、右（編輯/拖曳），
-//    在 DOM 上是彼此獨立的兄弟節點，不是巢狀在同一層。
-//    左右兩個 zone 只用 onClick（不掛 pointer handler），所以水平滑動的
-//    pointer handler 可以直接掛在最外層卡片、涵蓋整張卡，不會像巢狀結構
-//    那樣一旦 setPointerCapture 就吃掉子元素的 click——這裡也刻意不用
-//    setPointerCapture，touchAction:'pan-y' 已經夠讓手勢不被原生捲動搶走。
-//    展開內容（子任務列表等）是標題列的兄弟區塊，天生就摸不到滑動判斷，
-//    子任務點擊永遠不會被滑動邏輯干擾。
+// ── 三分區架構：左（完成/勾選）、中（標題＋詳情）、右（拖曳把手，僅勾選模式）
+// 卡片固定展開；長按中區進入編輯；水平滑動達閾值後帶滑出動畫再進勾選模式
 const MOVE_CANCEL_PX = 10;
-const SWIPE_THRESHOLD_PX = 56; // 水平滑動超過此距離 → 進入勾選模式
+const SWIPE_THRESHOLD_PX = 56;
+const LONG_PRESS_MS = 600;
+const LONG_PRESS_MOVE_CANCEL_PX = 10;
 
-export default function TaskCard({ task, onToggle, onOpenDetail, onToggleSub, onIncrement, isSelectMode, isSelected, onToggleSelect, readOnly, onEnterSelectMode, onEdit, onDragStart, onDragMove, onDragEnd, skillIconMap }) {
-  const [expanded, setExpanded] = useState(false);
+export default function TaskCard({
+  task, onToggle, onToggleSub, onIncrement,
+  isSelectMode, isSelected, onToggleSelect, readOnly,
+  onEnterSelectMode, onEdit, onDragStart, onDragMove, onDragEnd, skillIconMap,
+}) {
   const swipeOrigin = useRef({ x: 0, y: 0 });
   const swipeArmed = useRef(false);
   const skipClick = useRef(false);
-
-  // 進勾選模式時把卡片鎖起來：自動收合，展開內容（含子任務列表）整個不渲染，
-  // 不用再逐一幫每個內部控制項補 isSelectMode 判斷
-  useEffect(() => {
-    if (isSelectMode) setExpanded(false);
-  }, [isSelectMode]);
+  const longPressTimer = useRef(null);
+  const longPressOrigin = useRef({ x: 0, y: 0 });
+  const longPressFired = useRef(false);
+  const cardRef = useRef(null);
+  const swipeDx = useRef(0);
 
   const isOverdue = isTaskOverdue(task);
   const recurrenceText = describeRecurrence(task.recurrence);
@@ -59,41 +57,107 @@ export default function TaskCard({ task, onToggle, onOpenDetail, onToggleSub, on
   const subsTotal = task.subs?.length || 0;
   const countPct = task.type === 'count' ? Math.min(100, ((task.curr || 0) / (task.target || 1)) * 100) : 0;
 
-  // 水平滑動（左或右，範圍涵蓋整張卡片，含左右兩個 zone）→ 勾選模式；
-  // 點擊標題列 → 展開/收合（或勾選模式下切換選取）
-  // 注意：這裡刻意不呼叫 setPointerCapture——touchAction:'pan-y' 已經足夠避免手機上
-  // 被原生垂直捲動搶走手勢；capture 才是真正會害左右 zone 的 click 被吃掉的元兇。
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const resetCardTransform = () => {
+    if (cardRef.current) {
+      cardRef.current.style.transition = 'transform 0.2s ease-out';
+      cardRef.current.style.transform = 'translateX(0)';
+    }
+  };
+
   const handlePointerDown = (e) => {
     if (readOnly || isSelectMode) return;
     swipeOrigin.current = { x: e.clientX, y: e.clientY };
     swipeArmed.current = true;
     skipClick.current = false;
+    swipeDx.current = 0;
+    longPressFired.current = false;
+    longPressOrigin.current = { x: e.clientX, y: e.clientY };
+    clearLongPress();
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      skipClick.current = true;
+      swipeArmed.current = false;
+      resetCardTransform();
+      onEdit && onEdit(task);
+    }, LONG_PRESS_MS);
   };
+
   const handlePointerMove = (e) => {
-    if (!swipeArmed.current) return;
+    if (!swipeArmed.current && !longPressTimer.current) return;
     const dx = e.clientX - swipeOrigin.current.x;
     const dy = e.clientY - swipeOrigin.current.y;
-    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > MOVE_CANCEL_PX) {
-      swipeArmed.current = false; // 垂直滾動優先
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    // 移動超過短距離 → 取消長按（改走滑動）
+    if (longPressTimer.current) {
+      const ldx = Math.abs(e.clientX - longPressOrigin.current.x);
+      const ldy = Math.abs(e.clientY - longPressOrigin.current.y);
+      if (ldx > LONG_PRESS_MOVE_CANCEL_PX || ldy > LONG_PRESS_MOVE_CANCEL_PX) {
+        clearLongPress();
+      }
+    }
+
+    if (!swipeArmed.current) return;
+
+    // 垂直優先
+    if (absDy > absDx && absDy > MOVE_CANCEL_PX) {
+      swipeArmed.current = false;
+      resetCardTransform();
       return;
     }
-    if (Math.abs(dx) >= SWIPE_THRESHOLD_PX) {
+
+    // 跟手位移（卡片滑出感覺）
+    if (absDx > 4 && cardRef.current) {
+      swipeDx.current = dx;
+      const clamped = Math.max(-80, Math.min(80, dx * 0.6));
+      cardRef.current.style.transition = 'none';
+      cardRef.current.style.transform = `translateX(${clamped}px)`;
+    }
+
+    if (absDx >= SWIPE_THRESHOLD_PX) {
       swipeArmed.current = false;
       skipClick.current = true;
-      onEnterSelectMode && onEnterSelectMode(task.id);
+      clearLongPress();
+      // 滑出動畫再進勾選模式
+      if (cardRef.current) {
+        const dir = dx > 0 ? 1 : -1;
+        cardRef.current.style.transition = 'transform 0.18s ease-out';
+        cardRef.current.style.transform = `translateX(${dir * 120}px)`;
+        setTimeout(() => {
+          resetCardTransform();
+          onEnterSelectMode && onEnterSelectMode(task.id);
+        }, 160);
+      } else {
+        onEnterSelectMode && onEnterSelectMode(task.id);
+      }
     }
   };
-  const handlePointerUp = () => { swipeArmed.current = false; };
-  const handlePointerCancel = () => { swipeArmed.current = false; }; // 手勢被系統中斷（例如轉為原生捲動）時也要重置，否則狀態卡住
 
-  const handleHeaderClick = () => {
-    if (skipClick.current) { skipClick.current = false; return; }
-    if (isSelectMode) { onToggleSelect(task.id); return; }
-    setExpanded(e => !e);
+  const handlePointerUp = () => {
+    clearLongPress();
+    if (swipeArmed.current && Math.abs(swipeDx.current) < SWIPE_THRESHOLD_PX) {
+      resetCardTransform();
+    }
+    swipeArmed.current = false;
+  };
+
+  const handlePointerCancel = () => {
+    clearLongPress();
+    swipeArmed.current = false;
+    resetCardTransform();
   };
 
   return (
     <div
+      ref={cardRef}
       data-task-id={task.id}
       style={{
         ...cardStyle,
@@ -109,12 +173,13 @@ export default function TaskCard({ task, onToggle, onOpenDetail, onToggleSub, on
       onPointerLeave={handlePointerUp}
       onPointerCancel={handlePointerCancel}
     >
-      {/* 左 zone：一般模式＝完成/增量，勾選模式＝選取（同一個位置換皮膚，不是兩顆按鈕疊在一起） */}
+      {/* 左 zone：完成 / 選取 */}
       {!readOnly && (
         <div
           style={cardZoneLeftStyle}
           onClick={() => {
-            if (skipClick.current) { skipClick.current = false; return; } // 剛完成一次滑動，這次點擊不算數
+            if (skipClick.current) { skipClick.current = false; return; }
+            if (longPressFired.current) { longPressFired.current = false; return; }
             if (isSelectMode) { onToggleSelect(task.id); return; }
             if (task.type === 'count' && !task.done) onIncrement(task.id);
             else onToggle(task.id);
@@ -130,24 +195,20 @@ export default function TaskCard({ task, onToggle, onOpenDetail, onToggleSub, on
         </div>
       )}
 
-      {/* 中 zone：標題列（掛滑動手勢）＋ 展開內容（獨立區塊，不掛滑動手勢） */}
+      {/* 中 zone：標題（名稱＋分類）＋ 固定展開詳情 */}
       <div style={cardMiddleZoneStyle}>
-        <div
-          style={cardHeaderStyle}
-          onClick={handleHeaderClick}
-        >
+        <div style={cardHeaderStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontSize: 'var(--font-body)', color: 'var(--text, #2c1a0e)', textDecoration: task.done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>
+            <span style={{
+              fontWeight: 700,
+              fontSize: 'var(--font-body)',
+              color: 'var(--text, #2c1a0e)',
+              textDecoration: task.done ? 'line-through' : 'none',
+              wordBreak: 'break-word',
+            }}>
               {task.title}
             </span>
             {task.cat && <span style={catPillStyle}>{task.cat}</span>}
-            {isOverdue && <span style={{ fontSize: 'var(--font-caption)', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: 'var(--color-danger, #c0392b)', color: '#fff', fontWeight: 700 }}>⏰ 逾期</span>}
-            {task.recurrence && <span style={{ fontSize: 'var(--font-body)' }}>🔁</span>}
-            {task.attrs?.length > 0 && task.attrs.map(a => (
-              <span key={a} style={{ fontSize: 'var(--font-body)' }} title={a}>{skillIconMap?.[a] || '❓'}</span>
-            ))}
-            {task.pinned && <span style={{ fontSize: 'var(--font-body)', marginLeft: 'auto' }}>📌</span>}
-            {task.enchant?.boundAt && <span style={{ fontSize: 'var(--font-caption)', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: 'linear-gradient(135deg,var(--color-violet,#7c3aed),var(--color-rarity-sr,#a855f7))', color: '#fff', fontWeight: 700, letterSpacing: '0.04em' }}>✦ 祝福</span>}
           </div>
 
           {task.type === 'count' && (
@@ -164,24 +225,28 @@ export default function TaskCard({ task, onToggle, onOpenDetail, onToggleSub, on
               {task.subs.map((_, i) => (
                 <React.Fragment key={i}>
                   <div style={{ width: 'var(--size-xs)', height: 'var(--size-xs)', borderRadius: '50%', background: i < subsDone ? 'var(--color-correct, #227A59)' : 'rgba(0,0,0,0.1)', flexShrink: 0 }} />
-                  {i < subsTotal - 1 && <div style={{ flex: 1, height: 3, background: i < subsDone - 1 ? 'var(--color-correct, #227A59)' : 'rgba(0,0,0,0.1)' }} />}
+                  {i < subsTotal - 1 && <div style={{ flex: 1, height: 6, borderRadius: 3, background: i < subsDone - 1 ? 'var(--color-correct, #227A59)' : 'rgba(0,0,0,0.1)' }} />}
                 </React.Fragment>
               ))}
             </div>
           )}
         </div>
 
-        {expanded && !isSelectMode && (
+        {/* 固定展開的詳情區：其餘小標放這裡 */}
+        {!isSelectMode && (
           <div style={cardExpandedStyle}>
-            {task.attrs?.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)', marginBottom: 'var(--space-xs)' }}>
-                {task.attrs.map(a => (
-                  <span key={a} style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted, #8c6e52)' }}>
-                    {skillIconMap?.[a] || '❓'} {a}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)', marginBottom: 'var(--space-xs)' }}>
+              {isOverdue && <span style={{ fontSize: 'var(--font-caption)', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: 'var(--color-danger, #c0392b)', color: '#fff', fontWeight: 700 }}>⏰ 逾期</span>}
+              {task.recurrence && <span style={{ fontSize: 'var(--font-body)' }}>🔁</span>}
+              {task.pinned && <span style={{ fontSize: 'var(--font-body)' }}>📌</span>}
+              {task.enchant?.boundAt && <span style={{ fontSize: 'var(--font-caption)', padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: 'linear-gradient(135deg,var(--color-violet,#7c3aed),var(--color-rarity-sr,#a855f7))', color: '#fff', fontWeight: 700, letterSpacing: '0.04em' }}>✦ 祝福</span>}
+              {task.attrs?.length > 0 && task.attrs.map(a => (
+                <span key={a} style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted, #8c6e52)' }}>
+                  {skillIconMap?.[a] || '❓'} {a}
+                </span>
+              ))}
+            </div>
+
             {(task.narrativeText || task.desc) && (
               <p style={{ margin: '0 0 var(--space-xs)', lineHeight: 1.5, color: 'var(--text-2, #5c3d2e)', opacity: 0.85, fontStyle: task.narrativeText ? 'italic' : 'normal' }}>
                 {task.narrativeText || task.desc}
@@ -211,37 +276,20 @@ export default function TaskCard({ task, onToggle, onOpenDetail, onToggleSub, on
                 📅 {task.deadline}{isOverdue ? '（已逾期）' : ''}
               </div>
             )}
-
-            {!readOnly && (
-              <span
-                onClick={() => onOpenDetail && onOpenDetail(task)}
-                style={{ fontSize: 'var(--font-caption)', color: 'var(--color-info, #2980b9)', cursor: 'pointer' }}
-              >完整詳情 ›</span>
-            )}
           </div>
         )}
       </div>
 
-      {/* 右 zone：一般模式＝輕點開編輯（不用長按），勾選模式＝拖曳排序 */}
-      {!readOnly && (
+      {/* 右 zone：勾選模式才顯示拖曳把手（一般模式長按編輯，不再放設定鈕） */}
+      {!readOnly && isSelectMode && (
         <div style={cardZoneRightStyle}>
-          {isSelectMode ? (
-            <span
-              onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); onDragStart && onDragStart(task.id); }}
-              onPointerMove={e => onDragMove && onDragMove(e)}
-              onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); onDragEnd && onDragEnd(); }}
-              onPointerCancel={() => onDragEnd && onDragEnd()}
-              style={{ cursor: 'grab', color: 'var(--text-ghost)', fontSize: 'var(--font-title)', touchAction: 'none' }}
-            >☰</span>
-          ) : (
-            <span
-              onClick={() => {
-                if (skipClick.current) { skipClick.current = false; return; }
-                onEdit && onEdit(task);
-              }}
-              style={{ cursor: 'pointer', color: 'var(--text-ghost)', fontSize: 'var(--font-title)' }}
-            >⚙️</span>
-          )}
+          <span
+            onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); onDragStart && onDragStart(task.id); }}
+            onPointerMove={e => onDragMove && onDragMove(e)}
+            onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); onDragEnd && onDragEnd(); }}
+            onPointerCancel={() => onDragEnd && onDragEnd()}
+            style={{ cursor: 'grab', color: 'var(--text-ghost)', fontSize: 'var(--font-title)', touchAction: 'none' }}
+          >☰</span>
         </div>
       )}
     </div>

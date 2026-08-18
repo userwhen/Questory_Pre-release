@@ -9,12 +9,12 @@ export const Ads = {
   ADS_MODE: 'live', // 'mock' | 'live' —— 裝好廣告 SDK、填好正式版位 ID 後切成 'live'
 
   // 版位 ID 先放佔位字串，接 SDK（例如 AdMob）時換成正式的 Ad Unit ID。
-  PLACEMENTS: {
-    SHOP_BANNER: 'placeholder_shop_banner',
-    SHOP_NPC_BUBBLE: 'placeholder_shop_npc_bubble',
-    REWARDED_STAMINA: 'ca-app-pub-3940256099942544/5224354917',
-    REWARDED_TIMER: 'ca-app-pub-3940256099942544/5224354917',
-    REWARDED_CHECKIN: 'ca-app-pub-3940256099942544/5224354917',
+    PLACEMENTS: {
+    SHOP_BANNER:       'ca-app-pub-3940256099942544/6300978111',
+    SHOP_NPC_BUBBLE:   'placeholder_shop_npc_bubble',
+    REWARDED_STAMINA:  'ca-app-pub-3940256099942544/5224354917',
+    REWARDED_TIMER:    'ca-app-pub-3940256099942544/5224354917',
+    REWARDED_CHECKIN:  'ca-app-pub-3940256099942544/5224354917',
   },
 
   _initialized: false,
@@ -102,7 +102,7 @@ export const Ads = {
     try {
       await AdMob.showBanner({
         adId: placementId,
-        adSize: BannerAdSize.BANNER,
+        adSize: BannerAdSize.ADAPTIVE_BANNER,
         position: BannerAdPosition.TOP_CENTER,
         margin: Math.round(marginTop),
       });

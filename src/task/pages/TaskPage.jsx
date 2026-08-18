@@ -13,13 +13,12 @@ import {
 } from '@/task/components/TaskStyles.js';
 import { btnDangerStyle } from '@/styles/modalStyles.js';
 import ConfirmDialog from '@/ui/ConfirmDialog.jsx';
-import QuestSelectorModal from '@/task/components/QuestSelectorModal.jsx';
 import HistoryView from '@/task/components/HistoryView.jsx';
 import TaskCard from '@/task/components/TaskCard.jsx';
 import TaskFormModal from '@/task/components/TaskFormModal.jsx';
-import TaskDetailModal from '@/task/components/TaskDetailModal.jsx';
 import CalendarView from '@/task/components/CalendarView.jsx';
 import { sortTasks } from '@/task/utils/taskSort.js';
+import { TaskDict } from '@/task/data/taskdict.js';
 
 /* ─── 主頁面 ────────────────────────────────────────── */
 export default function TaskPage({ initialOpenForm = false, quickAddOnly = false, onDismiss, onRegisterBack }) {
@@ -37,19 +36,21 @@ export default function TaskPage({ initialOpenForm = false, quickAddOnly = false
   const [filter, setFilter] = useState('全部');
   const [modalTask, setModalTask] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [showSelector, setShowSelector] = useState(false);
-  const [pendingQC, setPendingQC] = useState(null);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedTasks, setSelectedTasks] = useState(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
-  const [detailTask, setDetailTask] = useState(null);
   const [pendingDeadline, setPendingDeadline] = useState(null);
   const [dragOrderIds, setDragOrderIds] = useState([]);
   const [draggedCardId, setDraggedCardId] = useState(null);
   const [skillIconMap, setSkillIconMap] = useState({});
+  // 勾選模式拖曳所屬分區：'active' | 'done'，限制只在同區內排序
+  const [dragSection, setDragSection] = useState(null);
 
   useEffect(() => {
-    if (initialOpenForm) setShowSelector(true);
+    if (initialOpenForm) {
+      setModalTask(null);
+      setShowForm(true);
+    }
   }, [initialOpenForm]);
 
   useEffect(() => {
@@ -77,9 +78,18 @@ export default function TaskPage({ initialOpenForm = false, quickAddOnly = false
 
   const sorted = useMemo(() => sortTasks(tasks, filter), [tasks, filter]);
   const allCats = ['全部', ...taskCats.filter(c => c !== '全部')];
-  const displayList = (isSelectMode && dragOrderIds.length)
-    ? dragOrderIds.map(id => sorted.find(t => t.id === id)).filter(Boolean)
-    : sorted;
+  const activeTasks = useMemo(() => sorted.filter(t => !t.done), [sorted]);
+  const doneTasks = useMemo(() => sorted.filter(t => t.done), [sorted]);
+  const sectionLabels = TaskDict.Task.DefaultForm;
+
+  // 勾選模式：依目前拖曳分區重排該區 id；非勾選模式用 sorted 切出的兩區
+  const displayActive = (isSelectMode && dragSection === 'active' && dragOrderIds.length)
+    ? dragOrderIds.map(id => activeTasks.find(t => t.id === id) || sorted.find(t => t.id === id)).filter(t => t && !t.done)
+    : activeTasks;
+  const displayDone = (isSelectMode && dragSection === 'done' && dragOrderIds.length)
+    ? dragOrderIds.map(id => doneTasks.find(t => t.id === id) || sorted.find(t => t.id === id)).filter(t => t && t.done)
+    : doneTasks;
+  const displayList = [...displayActive, ...displayDone];
   const handleToggle = useCallback(id => EventBus.emit(Events.Task.REQUEST_RESOLVE, { id }), []);
   const handleIncrement = useCallback(id => EventBus.emit(Events.Task.REQUEST_INCREMENT, { id }), []);
   const handleToggleSub = useCallback((tid, idx) => EventBus.emit(Events.Task.REQUEST_TOGGLE_SUB, { taskId: tid, subIdx: idx }), []);
@@ -100,7 +110,15 @@ export default function TaskPage({ initialOpenForm = false, quickAddOnly = false
 
   const startSelectMode = (initialId = null) => {
     setIsSelectMode(true);
-    setDragOrderIds(sorted.map(t => t.id));
+    const seed = initialId ? sorted.find(t => t.id === initialId) : null;
+    const section = seed?.done ? 'done' : 'active';
+    setDragSection(section);
+    const sectionIds = (section === 'done' ? doneTasks : activeTasks).map(t => t.id);
+    // 若 seed 不在當前 filter 切出的區，仍用 sorted 同 done 狀態
+    const ids = sectionIds.length
+      ? sectionIds
+      : sorted.filter(t => !!t.done === (section === 'done')).map(t => t.id);
+    setDragOrderIds(ids);
     const s = new Set();
     if (initialId) s.add(initialId);
     setSelectedTasks(s);
@@ -110,6 +128,7 @@ export default function TaskPage({ initialOpenForm = false, quickAddOnly = false
     setIsSelectMode(false);
     setSelectedTasks(new Set());
     setDragOrderIds([]);
+    setDragSection(null);
   };
 
   const executeBatchDelete = () => {
@@ -135,8 +154,9 @@ export default function TaskPage({ initialOpenForm = false, quickAddOnly = false
     if (!rowEl) return;
     const overId = rowEl.dataset.taskId;
     if (overId === draggedCardId) return;
+    // 只允許同區內排序：over 必須仍在 dragOrderIds 裡
     setDragOrderIds(prev => {
-      const ids = prev.length ? [...prev] : sorted.map(t => t.id);
+      const ids = prev.length ? [...prev] : [];
       const from = ids.indexOf(draggedCardId);
       const to = ids.indexOf(overId);
       if (from === -1 || to === -1) return ids;
@@ -150,47 +170,51 @@ export default function TaskPage({ initialOpenForm = false, quickAddOnly = false
   const openNewTask = () => {
     setModalTask(null);
     setPendingDeadline(null);
-    setShowSelector(true);
+    setShowForm(true);
   };
 
   const openNewTaskOnDate = (dateStr) => {
     setModalTask(null);
     setPendingDeadline(dateStr);
-    setShowSelector(true);
-  };
-
-  const handleSelectQC = (qc) => {
-    setPendingQC(qc);
-    setShowSelector(false);
     setShowForm(true);
   };
 
   const openEditForm = (task) => {
-  const currentContainer = achievements.find(a =>
-    a.targetType === 'manual_group' && (a.memberTaskIds || []).includes(task.id));
-  setModalTask({
-    ...task,
-    achLink: currentContainer ? { mode: 'join', achievementId: currentContainer.id } : null,
-  });
-  setPendingQC(task.questClass || 'guild');
-  setShowForm(true);
-};
+    const currentContainer = achievements.find(a =>
+      a.targetType === 'manual_group' && (a.memberTaskIds || []).includes(task.id));
+    setModalTask({
+      ...task,
+      achLink: currentContainer ? { mode: 'join', achievementId: currentContainer.id } : null,
+    });
+    setShowForm(true);
+  };
+
+  const renderTaskCard = (t) => (
+    <TaskCard
+      key={t.id}
+      task={t}
+      onToggle={handleToggle}
+      onToggleSub={handleToggleSub}
+      onIncrement={handleIncrement}
+      isSelectMode={isSelectMode}
+      isSelected={selectedTasks.has(t.id)}
+      onToggleSelect={toggleSelect}
+      onEnterSelectMode={startSelectMode}
+      onEdit={openEditForm}
+      onDragStart={handleCardDragStart}
+      onDragMove={handleCardDragMove}
+      onDragEnd={handleCardDragEnd}
+      skillIconMap={skillIconMap}
+    />
+  );
 if (quickAddOnly) {
-    // 只浮出「新增任務」流程本身（選類別→填表單），不渲染 TaskPage
-    // 自己的頁面外殼（分頁/列表/篩選列），背景會是呼叫端目前所在的
-    // 那一頁，不會變成一片空白或疊出第二層任務列表。
+    // 只浮出新增表單，不再經過類別選擇器
     return (
       <>
-        {showSelector && (
-          <QuestSelectorModal
-            onSelect={handleSelectQC}
-            onClose={() => { setShowSelector(false); onDismiss?.(); }}
-          />
-        )}
         {showForm && (
           <TaskFormModal
             initial={modalTask ? modalTask : {
-              questClass: pendingQC || 'guild',
+              questClass: 'guild',
               deadline: pendingDeadline ? `${pendingDeadline}T09:00` : '',
             }}
             cats={taskCats}
@@ -199,7 +223,7 @@ if (quickAddOnly) {
             openAchievements={achievements.filter(a => a.targetType === 'manual_group' && !a.claimed)}
             onSave={handleSave}
             onDelete={handleDelete}
-            onClose={() => { setShowForm(false); setPendingQC(null); setPendingDeadline(null); onDismiss?.(); }}
+            onClose={() => { setShowForm(false); setPendingDeadline(null); onDismiss?.(); }}
           />
         )}
       </>
@@ -230,7 +254,6 @@ if (quickAddOnly) {
         <CalendarView
           tasks={tasks}
           history={history}
-          onOpenDetail={setDetailTask}
           onToggle={handleToggle}
           onToggleSub={handleToggleSub}
           onIncrement={handleIncrement}
@@ -264,25 +287,36 @@ if (quickAddOnly) {
           </div>
 
           <div style={{ ...scrollAreaStyle, paddingBottom: isSelectMode ? 80 : 100 }}>
-            {displayList.length === 0
+            {displayActive.length === 0 && displayDone.length === 0
               ? <div style={emptyStyle}>📭<br />暫無任務<br /><span style={{ fontSize: 'var(--font-body)' }}>點擊右下角 ＋ 新增</span></div>
-              : displayList.map(t => (
-                <TaskCard key={t.id} task={t}
-                  onToggle={handleToggle}
-                  onOpenDetail={setDetailTask}
-                  onToggleSub={handleToggleSub}
-                  onIncrement={handleIncrement}
-                  isSelectMode={isSelectMode}
-                  isSelected={selectedTasks.has(t.id)}
-                  onToggleSelect={toggleSelect}
-                  onEnterSelectMode={startSelectMode}
-                  onEdit={openEditForm}
-                  onDragStart={handleCardDragStart}
-                  onDragMove={handleCardDragMove}
-                  onDragEnd={handleCardDragEnd}
-                  skillIconMap={skillIconMap}
-                />
-              ))
+              : (
+                <>
+                  {displayActive.length > 0 && (
+                    <div style={{ marginBottom: 'var(--space-md)' }}>
+                      <div style={{
+                        fontSize: 'var(--font-caption)',
+                        fontWeight: 700,
+                        color: 'var(--text-muted, #8c6e52)',
+                        letterSpacing: '0.06em',
+                        padding: 'var(--space-xs) var(--space-sm) var(--space-xs)',
+                      }}>{sectionLabels.sectionActive}</div>
+                      {displayActive.map(renderTaskCard)}
+                    </div>
+                  )}
+                  {displayDone.length > 0 && (
+                    <div style={{ marginBottom: 'var(--space-md)' }}>
+                      <div style={{
+                        fontSize: 'var(--font-caption)',
+                        fontWeight: 700,
+                        color: 'var(--text-muted, #8c6e52)',
+                        letterSpacing: '0.06em',
+                        padding: 'var(--space-xs) var(--space-sm) var(--space-xs)',
+                      }}>{sectionLabels.sectionDone}</div>
+                      {displayDone.map(renderTaskCard)}
+                    </div>
+                  )}
+                </>
+              )
             }
           </div>
 
@@ -314,27 +348,10 @@ if (quickAddOnly) {
         />
       )}
 
-      {showSelector && (
-        <QuestSelectorModal
-          onSelect={handleSelectQC}
-          onClose={() => setShowSelector(false)}
-        />
-      )}
-
-      {detailTask && (
-        <TaskDetailModal
-          task={detailTask}
-          onClose={() => setDetailTask(null)}
-          onToggle={handleToggle}
-          onToggleSub={handleToggleSub}
-          onEdit={openEditForm}
-        />
-      )}
-
       {showForm && (
         <TaskFormModal
           initial={modalTask ? modalTask : {
-            questClass: pendingQC || 'guild',
+            questClass: 'guild',
             deadline: pendingDeadline ? `${pendingDeadline}T09:00` : '',
           }}
           cats={taskCats}
@@ -343,7 +360,7 @@ if (quickAddOnly) {
           openAchievements={achievements.filter(a => a.targetType === 'manual_group' && !a.claimed)}
           onSave={handleSave}
           onDelete={handleDelete}
-          onClose={() => { setShowForm(false); setPendingQC(null); setPendingDeadline(null); }}
+          onClose={() => { setShowForm(false); setPendingDeadline(null); }}
         />
       )}
     </div>

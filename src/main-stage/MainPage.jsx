@@ -5,6 +5,7 @@ import { EventBus } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
 import { getQuickIcons } from '@/data/theme_config.js';
 import CharacterSprite from '@/ui/CharacterSprite.jsx';
+import { itemImgSrc } from '@/avatar/data/avatar_config.js';
 import {
   StageContext,
   getGridCellX,
@@ -159,36 +160,36 @@ export default function MainPage({ onNavigate }) {
             }}
           >
             <StageContext.Provider value={stageValue}>
-              {backgrounds.room && (
+              {backgrounds.room && itemImgSrc(backgrounds.room) && (
                 <img
-                  src={`img/${backgrounds.room}.png`}
+                  src={itemImgSrc(backgrounds.room)}
                   style={{ ...styles.bgImageBase, top: 0, height: DESIGN_HEIGHT }}
                   onError={e => { e.target.style.display = 'none'; }}
                   alt=""
                 />
               )}
-              {backgrounds.wall && (
+              {backgrounds.wall && itemImgSrc(backgrounds.wall) && (
                 <img
-                  src={`img/${backgrounds.wall}.png`}
+                  src={itemImgSrc(backgrounds.wall)}
                   style={{
                     ...styles.bgImageBase,
                     top: 0,
                     height: WALL_PX_HEIGHT + 1,
-                    objectFit: 'fill',
+                    objectFit: 'cover',
                     objectPosition: 'top',
                   }}
                   onError={e => { e.target.style.display = 'none'; }}
                   alt=""
                 />
               )}
-              {backgrounds.floor && (
+              {backgrounds.floor && itemImgSrc(backgrounds.floor) && (
                 <img
-                  src={`img/${backgrounds.floor}.png`}
+                  src={itemImgSrc(backgrounds.floor)}
                   style={{
                     ...styles.bgImageBase,
                     top: WALL_PX_HEIGHT - 1,
                     height: FLOOR_PX_HEIGHT + 1,
-                    objectFit: 'fill',
+                    objectFit: 'cover',
                     objectPosition: 'top',
                   }}
                   onError={e => { e.target.style.display = 'none'; }}
@@ -263,6 +264,8 @@ const styles = {
     left: 0,
     right: 0,
     width: '100%',
+    objectFit: 'cover',
+    objectPosition: 'center',
     opacity: 1,
     zIndex: Z.BG,
   },

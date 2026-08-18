@@ -415,6 +415,7 @@ const NPC_LINES = [
   '最近進了不少好東西呢。',
   '優質商品，童叟無欺！',
   '今天手氣不錯，多買一點吧？',
+  '今天下面也有一些不錯的優惠喔，可以看看～',
 ];
 
 export default function ShopPage() {
@@ -424,34 +425,21 @@ export default function ShopPage() {
   const [uploadItem, setUploadItem] = useState(undefined);
   const [bagOpen, setBagOpen] = useState(false);
   const [npcIdx, setNpcIdx] = useState(0);
-  const npcChangedAtRef = useRef(Date.now());
-  const npcAdBubbleRef = useRef(null);
+  const topBannerRef = useRef(null);
 
-  // 內容池：NPC 台詞隨時可換；廣告項目有最短顯示時間，時間到才能點掉換下一則。
-  // Pro 玩家（Ads.shouldShowAds() === false）不會抽到廣告項目，維持純台詞循環。
-  const npcPool = [
-    ...NPC_LINES.map(text => ({ type: 'text', text, minDurationMs: 0 })),
-    ...(Ads.shouldShowAds() ? [{ type: 'ad', minDurationMs: 3000 }] : []),
-  ];
-  const npcCurrent = npcPool[npcIdx % npcPool.length];
+  const npcCurrent = NPC_LINES[npcIdx % NPC_LINES.length];
+  const handleNpcClick = () => setNpcIdx(i => (i + 1) % NPC_LINES.length);
 
-  const handleNpcClick = () => {
-    const current = npcPool[npcIdx % npcPool.length];
-    if (Date.now() - npcChangedAtRef.current < (current?.minDurationMs ?? 0)) return;
-    npcChangedAtRef.current = Date.now();
-    setNpcIdx(i => (i + 1) % npcPool.length);
-  };
-
-  // 切到廣告那一格時，量測泡泡實際在螢幕上的位置，拿 top 當原生橫幅的 margin，
-  // 讓橫幅盡量貼近泡泡卡片的垂直位置；離開廣告內容或卸載時要記得收掉橫幅。
+  // 商店最上方的橫幅：只要在這頁、且廣告該顯示，就持續嘗試顯示原生橫幅。
+  // NPC 泡泡不再參與廣告輪播，全站目前只有這裡是真正接原生 SDK 的廣告版位。
   useEffect(() => {
-    if (npcCurrent.type !== 'ad' || Ads.ADS_MODE !== 'live') return;
-    const el = npcAdBubbleRef.current;
+    if (!Ads.shouldShowAds() || Ads.ADS_MODE !== 'live') return;
+    const el = topBannerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    Ads.showBanner(Ads.PLACEMENTS.SHOP_NPC_BUBBLE, rect.top);
+    Ads.showBanner(Ads.PLACEMENTS.SHOP_BANNER, rect.top);
     return () => { Ads.hideBanner(); };
-  }, [npcCurrent.type]);
+  }, []);
 
   const sysShop = useGameStore(s => s.sysShop);
   const userShopItems = useGameStore(s => s.shop?.user);
@@ -477,23 +465,14 @@ export default function ShopPage() {
 
         <img src="img/tavern_front.png" alt="" style={npcSceneFrontStyle} onError={e => { e.target.style.opacity = '0'; }} />
 
-        <div style={npcBubbleStyle}>
-          {npcCurrent.type === 'ad'
-            ? (
-              Ads.ADS_MODE === 'live'
-                ? <div ref={npcAdBubbleRef} style={{ width: '100%', height: '100%' }} />
-                : (
-                  <AdBanner
-                    placementId={Ads.PLACEMENTS.SHOP_NPC_BUBBLE}
-                    label="NPC 廣告版位"
-                    style={{ width: '100%', height: '100%', margin: 0 }}
-                  />
-                )
-            )
-            : <span style={{ fontWeight: 700, fontSize: 'var(--font-body)', color: 'var(--text, #2c1a0e)' }}>{npcCurrent.text}</span>}
+        <div style={npcBubbleStyle} onClick={handleNpcClick}>
+          <div style={npcArrowStyle} />
+          <span style={{ fontWeight: 700, fontSize: 'var(--font-title)', color: 'var(--text, #2c1a0e)' }}>{npcCurrent}</span>
         </div>
       </div>
-      <AdBanner placementId={Ads.PLACEMENTS.SHOP_BANNER} style={{ flexShrink: 0 }} />
+      {Ads.ADS_MODE === 'live'
+        ? <div ref={topBannerRef} style={{ height: 'var(--size-lg)', flexShrink: 0 }} />
+        : <AdBanner placementId={Ads.PLACEMENTS.SHOP_BANNER} style={{ flexShrink: 0, margin: 0 }} />}
       <div style={filterBarStyle}>
         <div style={{ flex: 1, display: 'flex', gap: 'var(--space-xs)', overflowX: 'auto', scrollbarWidth: 'none' }}>
           {CATS.map(c => (
@@ -556,12 +535,13 @@ export default function ShopPage() {
 
 /* ─── 樣式 ──────────────────────────────────────────── */
 const pageStyle = { display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg-panel, #f7e7ce)', position: 'relative' };
-const npcAreaStyle = { flexShrink: 0, position: 'relative', height: 180, overflow: 'hidden', background: 'var(--bg-hud, #2c1a0e)' };
+const npcAreaStyle = { flexShrink: 0, position: 'relative', height: 130, overflow: 'hidden', background: 'var(--bg-hud, #2c1a0e)' };
 const npcSceneBackStyle = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', zIndex: 1 };
-const npcSpriteWrapStyle = { position: 'absolute', left: '3%', bottom: 0, width: '30%', height: '62%', zIndex: 2, cursor: 'pointer' };
-const npcBubbleStyle = { position: 'absolute', left: 'var(--space-sm, 10px)', right: 'var(--space-sm, 10px)', top: 'var(--space-sm, 10px)', height: '38%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: 'var(--bg-card, #fff)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', zIndex: 4 };
 const npcSpriteImgStyle = { width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'bottom', pointerEvents: 'none' };
-const npcSceneFrontStyle = { position: 'absolute', left: 0, right: 0, bottom: 0, width: '100%', height: '26%', objectFit: 'cover', objectPosition: 'bottom', zIndex: 3, pointerEvents: 'none' };
+const npcSpriteWrapStyle = { position: 'absolute', left: '3%', bottom: 0, width: '42%', height: '100%', zIndex: 2, cursor: 'pointer' };
+const npcBubbleStyle = { position: 'absolute', right: 'var(--space-sm, 10px)', top: 'var(--space-sm, 10px)', maxWidth: '64%', padding: 'var(--space-sm) var(--space-md)', display: 'flex', alignItems: 'center', background: 'var(--bg-card, #fff)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', zIndex: 4, cursor: 'pointer' };
+const npcArrowStyle = { position: 'absolute', left: -8, top: 'var(--space-md, 16px)', width: 0, height: 0, borderTop: '7px solid transparent', borderBottom: '7px solid transparent', borderRight: '8px solid var(--bg-card, #fff)' };
+const npcSceneFrontStyle = { position: 'absolute', left: 0, right: 0, bottom: 0, width: '100%', height: '30%', objectFit: 'cover', objectPosition: 'bottom', zIndex: 3, pointerEvents: 'none' };
 const filterBarStyle = { flexShrink: 0, display: 'flex', alignItems: 'center', padding: 'var(--space-xs) var(--space-sm)', background: 'var(--bg-elevated, #fdf0d8)', borderBottom: '1px solid var(--border, rgba(0,0,0,0.09))' };
 const filterBtnStyle = { flexShrink: 0, borderRadius: 50, padding: 'var(--space-xs) var(--space-sm)', fontWeight: 700, fontSize: 'var(--font-caption)', cursor: 'pointer', transition: 'var(--t-fast)', fontFamily: 'inherit', whiteSpace: 'nowrap' };
 const scrollAreaStyle = { flex: 1, overflowY: 'auto', overflowX: 'hidden' };

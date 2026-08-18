@@ -1,6 +1,6 @@
 /* src/components/task/TaskFormModal.jsx */
-import React, { useState, useMemo, useRef } from 'react';
-import { EventBus } from '@/core/events.js';
+import React, { useState, useRef } from 'react';
+import { EventBus, EventHelper } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
 import { TaskDict, REMINDER_MODES } from '@/task/data/taskdict.js';
 import Modal from '@/ui/Modal.jsx';
@@ -9,15 +9,10 @@ import {
   labelStyle, inputStyle,
   btnStyle, btnSmallStyle, boxStyle,
 } from '@/task/components/TaskStyles.js';
-import { getRewardWeight, getRewardRange } from '@/reward/utils/rewardCurve.js';
 import { btnGhostStyle } from '@/styles/modalStyles.js';
-// 每個分類預設顯示哪些欄位（其餘收進「展開進階戰術設定」）
+// 類別已統一：預設露出描述、技能、價值權重（技能在前、權重在後）；其餘進進階
 const CATEGORY_VISIBLE_FIELDS = {
-  gather: ['desc', 'subs'],
-  hunt: ['subs', 'recurrence'],
-  event: ['location', 'deadline', 'reminder'],
-  boss: ['desc', 'subs', 'matrix'],
-  guild: ['desc'],
+  guild: ['desc', 'skills', 'matrix'],
 };
 
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
@@ -57,11 +52,16 @@ const getNextOccurrenceLabel = (startDateStr, recurrence) => {
 
 export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}, openAchievements = [], onSave, onDelete, onClose }) {
   const isEdit = !!initial?.id;
-  const qc = initial?.questClass || 'guild';
-  const qDict = TaskDict.Task.QuestClass[qc] || TaskDict.Task.QuestClass.guild;
+  // 類別差異已淡化：一律走公會委託表單
+  const qc = 'guild';
+  const qDict = TaskDict.Task.QuestClass.guild;
   const dDict = TaskDict.Task.DefaultForm;
+  const attrMap = useGameStore(s => s.attrs || {});
+  // 直接訂閱 store 的 skills，新增技能後圖標／列表不必等回屬性頁才更新
+  const storeSkills = useGameStore(s => s.skills || []);
+  const skillsList = storeSkills.length ? storeSkills : skills;
 
-  const visibleFields = CATEGORY_VISIBLE_FIELDS[qc] || CATEGORY_VISIBLE_FIELDS.guild;
+  const visibleFields = CATEGORY_VISIBLE_FIELDS.guild;
   const hasAdvancedFields = ADVANCED_TOGGLABLE_FIELDS.some(f => !visibleFields.includes(f));
   // 編輯模式下，只要該欄位當初有填內容，即使模板沒把它排進預設露出欄位，也直接算「該露出」，
   // 不用玩家再點一次「展開進階設定」。matrix 沒有真正的「空」狀態（永遠有預設值 2/2），不適用這條規則，維持只看模板。
@@ -85,6 +85,10 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
   const [addingCat, setAddingCat] = useState(false);
   const [addDraft, setAddDraft] = useState('');
   const [pendingCatDelete, setPendingCatDelete] = useState(null);
+  const [addingSkill, setAddingSkill] = useState(false);
+  const [skillNameDraft, setSkillNameDraft] = useState('');
+  const [skillParentDraft, setSkillParentDraft] = useState('STR');
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
   const catPressTimer = useRef(null);
   const catPressOrigin = useRef({ x: 0, y: 0 });
 
@@ -180,10 +184,23 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
     set('subs', ns);
   };
 
-  const estimatedRewards = useMemo(() => {
-    const w = getRewardWeight(form.importance, form.urgency);
-    return getRewardRange(w);
-  }, [form.importance, form.urgency]);
+  const isDirty = () => {
+    if (form.title?.trim()) return true;
+    if (form.desc?.trim()) return true;
+    if (form.subs?.length > 0 || subDraft.trim()) return true;
+    if (form.attrs?.length > 0) return true;
+    if (form.location?.trim()) return true;
+    if (form.deadline) return true;
+    if (form.recurrence) return true;
+    if (form.achLink) return true;
+    if (isEdit) return true; // 編輯模式關閉前一律提醒
+    return false;
+  };
+
+  const requestClose = () => {
+    if (isDirty()) setShowUnsavedConfirm(true);
+    else onClose();
+  };
 
   const handleSave = () => {
     if (!form.title.trim()) { EventBus.emit(Events.System.TOAST, '⚠️ 請輸入任務名稱'); return; }
@@ -191,11 +208,32 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
     const finalSubs = subDraft.trim()
       ? [...form.subs, { text: subDraft.trim(), done: false }]
       : form.subs;
-    const narrativeText = form.narrativeMode && qDict.descTemplate
-      ? qDict.descTemplate({ title: form.title, desc: form.desc, subs: finalSubs, target: form.target, location: form.location })
-      : null;
+    // 未開遊戲化：只用玩家描述（可空白），narrativeText 清掉
+    // 有開遊戲化：描述欄即為最終文案（模板填入後可再改），以玩家內容為準，不再重新套模板
+    const narrativeText = form.narrativeMode ? (form.desc || '') : null;
     onSave({ ...form, subs: finalSubs, narrativeText });
     onClose();
+  };
+
+  // 開啟遊戲化：把模板寫進描述欄，玩家可再改；關閉：只關標記，不強制清描述
+  const toggleNarrativeMode = () => {
+    setForm(f => {
+      const next = !f.narrativeMode;
+      if (!next) return { ...f, narrativeMode: false };
+      const finalSubs = subDraft.trim()
+        ? [...f.subs, { text: subDraft.trim(), done: false }]
+        : f.subs;
+      const generated = qDict.descTemplate
+        ? qDict.descTemplate({
+          title: f.title,
+          desc: f.desc,
+          subs: finalSubs,
+          target: f.target,
+          location: f.location,
+        })
+        : f.desc;
+      return { ...f, narrativeMode: true, desc: generated || f.desc };
+    });
   };
 
   const DescBlock = (
@@ -205,24 +243,81 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
     </>
   );
 
+  const submitAddSkill = async () => {
+    const name = skillNameDraft.trim();
+    if (!name) { setAddingSkill(false); return; }
+    try {
+      const result = await EventHelper.requestOnce(
+        Events.Stats.REQUEST_SAVE_SKILL,
+        Events.Stats.SAVE_SKILL_RESULT,
+        { name, parent: skillParentDraft || 'STR', editId: null },
+      );
+      if (result?.success === false) {
+        EventBus.emit(Events.System.TOAST, `⚠️ ${result.msg || '新增技能失敗'}`);
+        return;
+      }
+      setForm(f => ({
+        ...f,
+        attrs: [...(f.attrs || []).filter(a => a !== name), name].slice(0, 3),
+      }));
+      setSkillNameDraft('');
+      setSkillParentDraft('STR');
+      setAddingSkill(false);
+      EventBus.emit(Events.System.TOAST, `✅ 已新增技能「${name}」`);
+    } catch {
+      EventBus.emit(Events.System.TOAST, '❌ 新增技能逾時，請稍後再試');
+    }
+  };
+
+  const skillIconOf = (s) => attrMap[s.parent]?.icon || '❓';
+
   const SkillsBlock = (
     <>
       <label style={labelStyle}>{dDict.skillsLabel}</label>
-      <div style={{ ...boxStyle, display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)', marginBottom: 'var(--space-md)' }}>
-        {skills.length === 0
+      <div style={{ ...boxStyle, display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)', marginBottom: 'var(--space-md)', alignItems: 'center' }}>
+        {skillsList.length === 0 && !addingSkill
           ? <span style={{ color: 'var(--text-ghost)', fontSize: 'var(--font-body)' }}>{dDict.noSkills}</span>
-          : skills.map(s => {
+          : skillsList.map(s => {
             const active = form.attrs?.includes(s.name);
             return (
               <button key={s.name} onClick={() => {
                 const newAttrs = active ? form.attrs.filter(a => a !== s.name) : [...(form.attrs || []), s.name].slice(0, 3);
                 set('attrs', newAttrs);
               }} style={{ ...btnSmallStyle, background: active ? 'var(--color-correct-soft)' : 'transparent', borderColor: active ? 'var(--color-correct)' : 'var(--border)', color: active ? 'var(--color-correct-dark)' : 'inherit', opacity: active ? 1 : 0.7 }}>
-                {s.name}
+                <span style={{ marginRight: 4 }}>{skillIconOf(s)}</span>{s.name}
               </button>
             );
           })
         }
+        {addingSkill ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)', alignItems: 'center', width: '100%', marginTop: 'var(--space-xs)' }}>
+            <input
+              autoFocus
+              style={{ ...inputStyle, flex: 1, minWidth: 80, marginBottom: 0, padding: 'var(--space-xs) var(--space-xs)' }}
+              maxLength={10}
+              placeholder="技能名稱"
+              value={skillNameDraft}
+              onChange={e => setSkillNameDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') submitAddSkill(); if (e.key === 'Escape') setAddingSkill(false); }}
+            />
+            <select
+              style={{ ...inputStyle, width: 'auto', marginBottom: 0, padding: 'var(--space-xs) var(--space-xs)' }}
+              value={skillParentDraft}
+              onChange={e => setSkillParentDraft(e.target.value)}
+            >
+              {Object.entries(attrMap).map(([k, a]) => (
+                <option key={k} value={k}>{a.icon || ''} {a.name || k}</option>
+              ))}
+            </select>
+            <button style={{ ...btnSmallStyle, padding: 'var(--space-xs) var(--space-xs)' }} onClick={submitAddSkill}>✓</button>
+            <button style={{ ...btnSmallStyle, padding: 'var(--space-xs) var(--space-xs)', color: 'var(--color-danger)' }} onClick={() => setAddingSkill(false)}>✕</button>
+          </div>
+        ) : (
+          <button
+            style={{ ...btnSmallStyle, padding: 'var(--space-xs) var(--space-xs)', opacity: 0.7 }}
+            onClick={() => { setAddingSkill(true); setSkillNameDraft(''); setSkillParentDraft(Object.keys(attrMap)[0] || 'STR'); }}
+          >{dDict.addSkill}</button>
+        )}
       </div>
     </>
   );
@@ -244,7 +339,6 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
     <div style={{ ...boxStyle, marginBottom: 'var(--space-md)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-xs)' }}>
         <span style={{ ...labelStyle, marginBottom: 0 }}>{dDict.matrixLabel}</span>
-        <span style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted)' }}>💰{estimatedRewards.min}~{estimatedRewards.max} ✨{estimatedRewards.min}~{estimatedRewards.max}</span>
       </div>
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--font-body)' }}><span>{dDict.importance}</span><b>{form.importance}</b></div>
@@ -528,7 +622,7 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
   return (
     <Modal
       title={isEdit ? '編輯任務' : qDict.modalTitle}
-      onClose={onClose}
+      onClose={requestClose}
       footer={isEdit ? (
         <>
           <button style={{ ...btnStyle, background: 'var(--bg-card)', color: 'var(--text)', border: '1px solid var(--border)' }}
@@ -550,11 +644,11 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
       <div style={{ display: 'flex', gap: 'var(--space-xs)', alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
           <label style={labelStyle}>{qDict.inputLabel}</label>
-          <input style={inputStyle} maxLength={10} placeholder="要做什麼呢？" value={form.title} onChange={e => set('title', e.target.value)} />
+          <input style={inputStyle} maxLength={10} placeholder="要做甚麼呢？（限10字）" value={form.title} onChange={e => set('title', e.target.value)} />
         </div>
         <div style={{ paddingTop: 'var(--space-lg)', display: 'flex', gap: 'var(--space-xs)' }}>
           <button style={{ ...btnSmallStyle, fontSize: 'var(--font-caption)', padding: 'var(--space-xs) var(--space-xs)', border: 'none', background: form.narrativeMode ? 'var(--color-correct)' : 'transparent', color: form.narrativeMode ? '#fff' : 'inherit', opacity: form.narrativeMode ? 1 : 0.5 }}
-            onClick={() => set('narrativeMode', !form.narrativeMode)}>🎭</button>
+            onClick={toggleNarrativeMode}>🎭</button>
           <button style={{ ...btnGhostStyle, border: 'none', fontSize: 'var(--font-title)', padding: 'var(--space-xs) var(--space-xs)', opacity: form.pinned ? 1 : 0.3 }} onClick={() => set('pinned', !form.pinned)}>📌</button>
         </div>
       </div>
@@ -609,13 +703,13 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
         </div>
       </div>
       {CaloriesBlock}
+      {showSkillsAbove && SkillsBlock}
+      {showMatrixAbove && MatrixBlock}
       {showSubsAbove && SubtasksBlock}
       {showSubsAbove && CountBlock}
       {showLocationAbove && LocationBlock}
       {showTimeSettingsAbove && TimeSettingsBlock}
       {showTimeSettingsAbove && ReminderBlock}
-      {showSkillsAbove && SkillsBlock}
-      {showMatrixAbove && MatrixBlock}
       {showAchLinkAbove && AchLinkBlock}
 
       {hasAdvancedFields && (
@@ -655,6 +749,25 @@ export default function TaskFormModal({ initial, cats, skills = [], unlocks = {}
           <p style={{ fontSize: 'var(--font-body)', color: 'var(--text-2)', lineHeight: 1.6 }}>
             刪除「{pendingCatDelete}」後，跟這個分類綁在一起的成就要一併刪除嗎？<br />
             選「保留」的話，成就會留著但進度會停在現在的狀態——除非之後又新增一個同名分類，才會自動接回去繼續累積。
+          </p>
+        </Modal>
+      )}
+
+      {showUnsavedConfirm && (
+        <Modal
+          title="尚未儲存"
+          onClose={() => setShowUnsavedConfirm(false)}
+          footer={
+            <>
+              <button style={{ ...btnStyle, background: 'var(--bg-card)', color: 'var(--text)', border: '1px solid var(--border)' }}
+                onClick={() => setShowUnsavedConfirm(false)}>繼續編輯</button>
+              <button style={{ ...btnStyle, background: 'var(--color-danger)', border: 'none' }}
+                onClick={() => { setShowUnsavedConfirm(false); onClose(); }}>放棄並關閉</button>
+            </>
+          }
+        >
+          <p style={{ fontSize: 'var(--font-body)', color: 'var(--text-2)', lineHeight: 1.6, margin: 0 }}>
+            內容還沒儲存，確定要關閉嗎？未儲存的修改將會消失。
           </p>
         </Modal>
       )}

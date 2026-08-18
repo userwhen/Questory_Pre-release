@@ -33,7 +33,7 @@ export const cardZoneLeftStyle   = { width: 'var(--size-md)', flexShrink: 0, dis
 export const cardZoneRightStyle  = { width: 'var(--size-md)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border, rgba(0,0,0,0.08))', cursor: 'pointer' };
 export const cardMiddleZoneStyle = { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' };
 export const cardHeaderStyle     = { padding: 'var(--space-sm) var(--space-sm)', cursor: 'pointer' };
-export const cardExpandedStyle   = { padding: '0 var(--space-sm) var(--space-sm)', borderTop: '1px dashed var(--border, rgba(0,0,0,0.1))', marginTop: 'var(--space-xs)', fontSize: 'var(--font-body)' };
+export const cardExpandedStyle   = { padding: '0 var(--space-sm) var(--space-sm)', borderTop: 'none', marginTop: 'var(--space-xs)', fontSize: 'var(--font-body)' };
 
 export const cardRowStyle      = { display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', width: '100%' };
 export const checkStyle        = { width: 'var(--size-xs)', height: 'var(--size-xs)', borderRadius: '50%', border: '2px solid', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all var(--t-base)', boxSizing: 'border-box' };

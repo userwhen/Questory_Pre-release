@@ -6,7 +6,7 @@
 export const DefaultData = {
     userName: '',        // WelcomeScreen 寫入此欄，App.jsx 讀取判斷是否顯示歡迎畫面
     name: 'Commander',  // 舊欄位保留相容
-    gold: 0, freeGem: 0, paidGem: 0, lv: 1, exp: 0,
+    gold: 0, freeGem: 2000, paidGem: 0, lv: 1, exp: 0,
     loginStreak: 0, totalLoginDays: 0, lastLoginDate: new Date().toDateString(),
 
     attrs: {

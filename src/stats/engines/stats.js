@@ -52,17 +52,17 @@ export const StatsEngine = {
     EventBus.emit(Events.Stats.UPDATED);
   },
 
-  reducePlayerExp(amount, isStrict = false) {
+  // 取消完成＝完整還原：一律允許降等（方案甲）。
+  // isStrict 保留給呼叫端其他懲罰語意（例如金幣可否扣成負），此處不再用來決定是否降等。
+  reducePlayerExp(amount, _isStrict = false) {
     setState(s => {
       let exp = (s.exp || 0) - amount;
       let lv = s.lv || 1;
 
-      if (isStrict) {
-        while (exp < 0 && lv > 1) {
-          lv--;
-          exp += lv * 100;
-          EventBus.emit(Events.System.TOAST, `📉 等級降回 Lv.${lv}`);
-        }
+      while (exp < 0 && lv > 1) {
+        lv--;
+        exp += lv * 100;
+        EventBus.emit(Events.System.TOAST, `📉 等級降回 Lv.${lv}`);
       }
       if (exp < 0) exp = 0;
       return { exp, lv };
@@ -110,8 +110,8 @@ export const StatsEngine = {
     EventBus.emit(Events.Stats.UPDATED);
   },
 
+  // 取消完成＝完整還原：技能等級與父屬性一律回扣（方案甲），不再只在嚴格模式生效。
   reduceSkillProficiency(skillName, amount = 1) {
-    const isStrict = getState().settings?.strictMode;
     setState(s => {
       let attrs = JSON.parse(JSON.stringify(s.attrs || {}));
       let targetParent = null;
@@ -121,19 +121,17 @@ export const StatsEngine = {
         targetParent = sk.parent;
         let exp = (sk.exp || 0) - amount;
         let lv = sk.lv;
-        if (isStrict) {
-          while (exp < 0 && lv > 1) {
-            lv--;
-            exp += lv * 10;
-          }
+        while (exp < 0 && lv > 1) {
+          lv--;
+          exp += lv * 10;
         }
         if (exp < 0) exp = 0;
         return { ...sk, exp, lv };
       });
 
-      if (isStrict && targetParent && attrs[targetParent]) {
+      if (targetParent && attrs[targetParent]) {
         attrs = this._mutReduceAttrExp(attrs, targetParent, amount);
-      } else if (isStrict && !targetParent && attrs[skillName]) {
+      } else if (!targetParent && attrs[skillName]) {
         attrs = this._mutReduceAttrExp(attrs, skillName, amount);
       }
 

@@ -2,27 +2,27 @@ import React from 'react';
 import { useGameStore } from '@/core/state.js';
 import { EventBus } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
-import CharacterSprite from '@/ui/CharacterSprite.jsx';
+import PortraitStack from '@/avatar/components/PortraitStack.jsx';
 
 export default function HUD({ onAvatarClick, onSettingsClick }) {
-    const { userName, lv, exp, gold, freeGem, paidGem, wearing } = useGameStore(s => ({
+    const { userName, lv, exp, gold, freeGem, paidGem, portrait, frame } = useGameStore(s => ({
         userName: s.userName ?? 'Commander',
         lv: s.lv ?? 1,
         exp: s.exp ?? 0,
         gold: s.gold ?? 0,
         freeGem: s.freeGem ?? 0,
         paidGem: s.paidGem ?? 0,
-        wearing: s.avatar?.wearing ?? {},
+        portrait: s.avatar?.equippedPortrait ?? null,
+        frame: s.avatar?.equippedFrame ?? null,
     }));
 
     const expPct = Math.min(100, Math.round((exp / (lv * 100)) * 100));
-    const totalGem = freeGem + paidGem;
 
     return (
         <div style={s.hud}>
             <div style={s.left}>
                 <div style={s.avatar} onClick={onAvatarClick}>
-                    <AvatarImage wearing={wearing} />
+                    <PortraitStack portrait={portrait} frame={frame} />
                 </div>
                 <div style={s.info}>
                     <div style={s.name}>{userName}</div>
@@ -50,15 +50,6 @@ export default function HUD({ onAvatarClick, onSettingsClick }) {
     );
 }
 
-function AvatarImage({ wearing }) {
-    const hasAnyEquip = wearing && Object.keys(wearing).length > 0;
-    if (!hasAnyEquip) {
-        // 存檔還沒有任何穿戴資料時的保底顯示（理論上 DefaultData 一定有 body/face）
-        return <span style={{ fontSize: 'var(--size-sm)' }}>🧙</span>;
-    }
-    return <CharacterSprite wearing={wearing} />;
-}
-
 const s = {
     hud: {
         flexShrink: 0,
@@ -81,12 +72,8 @@ const s = {
     },
     avatar: {
         width: 'var(--size-md)', height: 'var(--size-md)',
-        borderRadius: 'var(--radius-sm)',
-        border: '2px solid var(--color-gold, #f5a623)',
-        background: '#3b2519',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
         flexShrink: 0, cursor: 'pointer',
-        overflow: 'hidden',
+        position: 'relative',
     },
     info: {
         display: 'flex', flexDirection: 'column',
@@ -127,9 +114,6 @@ const s = {
     },
     currency: {
         display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', fontSize: 'var(--font-caption)',
-    },
-    currVal: {
-        color: 'var(--text-on-dark, #f5e6cf)', fontWeight: 700,
     },
     gemFree: { color: 'var(--color-info, #2980b9)', fontWeight: 700, fontSize: 'var(--font-caption)' },
     gemPaid: { color: 'var(--color-info, #2980b9)', fontWeight: 700, fontSize: 'var(--font-caption)' },

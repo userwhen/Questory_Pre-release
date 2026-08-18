@@ -9,20 +9,20 @@
 // ⚠️ imgId 對應的美術檔案目前都還不存在，先測介面用，正式上線前要換成真圖。
 
 export const PortraitShop = [
-  { id: 'portrait_01', name: '新手冒險者', price: 0, imgId: 'portrait_01', rarity: 'R' },
-  { id: 'portrait_02', name: '沉思的旅人', price: 100, imgId: 'portrait_02', rarity: 'R' },
-  { id: 'portrait_03', name: '林間精靈', price: 200, imgId: 'portrait_03', rarity: 'SR' },
-  { id: 'portrait_04', name: '星夜魔法師', price: 300, imgId: 'portrait_04', rarity: 'SSR' },
-  { id: 'portrait_05', name: '勤勉的證明', unlockCondition: { type: 'level', value: 10 }, imgId: 'portrait_05', rarity: 'SR' },
-  { id: 'portrait_06', name: '七日之約', unlockCondition: { type: 'loginStreak', value: 7 }, imgId: 'portrait_06', rarity: 'SR' },
-  { id: 'portrait_07', name: '百日行者', unlockCondition: { type: 'totalLoginDays', value: 100 }, imgId: 'portrait_07', rarity: 'SSR' },
+  { id: 'portrait_01', name: '新手冒險者', price: 0, imgId: 'portrait/portrait_01', rarity: 'R' },
+  { id: 'portrait_02', name: '沉思的旅人', price: 100, imgId: 'portrait/portrait_02', rarity: 'R' },
+  { id: 'portrait_03', name: '林間精靈', price: 200, imgId: 'portrait/portrait_03', rarity: 'SR' },
+  { id: 'portrait_04', name: '星夜魔法師', price: 300, imgId: 'portrait/portrait_04', rarity: 'SSR' },
+  { id: 'portrait_05', name: '勤勉的證明', unlockCondition: { type: 'level', value: 10 }, imgId: 'portrait/portrait_05', rarity: 'SR' },
+  { id: 'portrait_06', name: '七日之約', unlockCondition: { type: 'loginStreak', value: 7 }, imgId: 'portrait/portrait_06', rarity: 'SR' },
+  { id: 'portrait_07', name: '百日行者', unlockCondition: { type: 'totalLoginDays', value: 100 }, imgId: 'portrait/portrait_07', rarity: 'SSR' },
 ];
 
 export const FrameShop = [
-  { id: 'frame_01', name: '木紋描邊', price: 100, imgId: 'frame_01', rarity: 'R' },
-  { id: 'frame_02', name: '金色藤蔓', price: 250, imgId: 'frame_02', rarity: 'SR' },
-  { id: 'frame_03', name: '星辰之環', unlockCondition: { type: 'level', value: 20 }, imgId: 'frame_03', rarity: 'SSR' },
-  { id: 'frame_04', name: '連續七日', unlockCondition: { type: 'loginStreak', value: 7 }, imgId: 'frame_04', rarity: 'SR' },
+  { id: 'frame_01', name: '木紋描邊', price: 100, imgId: 'frame/frame_01', rarity: 'R' },
+  { id: 'frame_02', name: '金色藤蔓', price: 250, imgId: 'frame/frame_02', rarity: 'SR' },
+  { id: 'frame_03', name: '星辰之環', unlockCondition: { type: 'level', value: 20 }, imgId: 'frame/frame_03', rarity: 'SSR' },
+  { id: 'frame_04', name: '連續七日', unlockCondition: { type: 'loginStreak', value: 7 }, imgId: 'frame/frame_04', rarity: 'SR' },
 ];
 
 // 頭像框「不使用」的 sentinel——跟 null（從未設定過）分開，

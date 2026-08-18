@@ -28,11 +28,13 @@ export const TaskEngine = {
     const unsubDelete = EventBus.on(Events.Task.REQUEST_DELETE, ({ id }) => this.deleteTask(id));
     const unsubBatchDelete = EventBus.on(Events.Task.REQUEST_BATCH_DELETE, ({ ids }) => { (ids || []).forEach(id => this.deleteTask(id)); });
 
-    const unsubRewardResult = EventBus.on(Events.Reward.ROLL_RESULT, ({ requestId, gold, exp, coupon }) => {
+    const unsubRewardResult = EventBus.on(Events.Reward.ROLL_RESULT, ({ requestId, gold, exp, coupon, freeGem }) => {
       const pending = _pendingRewardRequests[requestId];
       if (!pending) return; // 不是本模組發出的請求，或已經處理過
       delete _pendingRewardRequests[requestId];
-      this._finalizeCompletion(pending.taskId, pending.impact, pending.combo, { gold, exp, coupon });
+      this._finalizeCompletion(pending.taskId, pending.impact, pending.combo, {
+        gold, exp, coupon, freeGem: freeGem || 0,
+      });
     });
 
     return [unsubDailyReset, unsubHistorySummary, unsubResolve, unsubIncrement,
@@ -191,8 +193,9 @@ export const TaskEngine = {
     const task = (s.tasks || []).find(t => t.id === id);
 
     if (task?.done) {
-      const actualReward = task.lastReward || { gold: 0, exp: 0, coupon: false };
+      const actualReward = task.lastReward || { gold: 0, exp: 0, coupon: false, freeGem: 0 };
       const isStrict = s.unlocks?.feature_strict && s.settings?.strictMode;
+      const gemAmt = actualReward.freeGem || 0;
 
       setState(store => ({
         gold: isStrict
@@ -201,6 +204,9 @@ export const TaskEngine = {
         rewardCoupons: actualReward.coupon
           ? Math.max(0, (store.rewardCoupons || 0) - 1)
           : store.rewardCoupons,
+        freeGem: isStrict
+          ? (store.freeGem || 0) - gemAmt
+          : Math.max(0, (store.freeGem || 0) - gemAmt),
       }));
 
       EventBus.emit(Events.Stats.REDUCE_PLAYER_EXP, { amount: actualReward.exp, isStrict });
@@ -271,9 +277,11 @@ export const TaskEngine = {
       return;
     }
 
-    // 撤銷已完成：回收先前實際發放的獎勵（含金幣券），這條路徑不含隨機性，維持同步
-    const actualReward = task.lastReward || { gold: 0, exp: 0, coupon: false };
+    // 撤銷已完成：回收先前實際發放的獎勵（含金幣券、免費鑽石），這條路徑不含隨機性，維持同步
+    // 經驗／技能／父屬性一律完整還原（方案甲）；金幣／鑽石是否可扣成負仍依嚴格模式
+    const actualReward = task.lastReward || { gold: 0, exp: 0, coupon: false, freeGem: 0 };
     const isStrict = s.unlocks?.feature_strict && s.settings?.strictMode;
+    const gemAmt = actualReward.freeGem || 0;
 
     setState(store => {
       const oldTask = (store.tasks || []).find(t => t.id === taskId);
@@ -289,6 +297,9 @@ export const TaskEngine = {
       const rewardCoupons = actualReward.coupon
         ? Math.max(0, (store.rewardCoupons || 0) - 1)
         : store.rewardCoupons;
+      const freeGem = isStrict
+        ? (store.freeGem || 0) - gemAmt
+        : Math.max(0, (store.freeGem || 0) - gemAmt);
       const isCalActive = store.unlocks?.feature_cal || store.settings?.calMode;
       const cal = isCalActive && task.calories > 0
         ? {
@@ -299,7 +310,7 @@ export const TaskEngine = {
           ].slice(0, 30),
         }
         : store.cal;
-      return { tasks, history, gold, rewardCoupons, cal };
+      return { tasks, history, gold, rewardCoupons, freeGem, cal };
     });
 
     EventBus.emit(Events.Stats.REDUCE_PLAYER_EXP, { amount: actualReward.exp, isStrict });
@@ -327,6 +338,8 @@ export const TaskEngine = {
       status: 'completed',
     };
 
+    const gemGain = rewards.freeGem || 0;
+
     setState(store => {
       const tasks = (store.tasks || []).map(t => t.id !== taskId ? t : {
         ...t, done: true, doneTime: historyEntry.doneTime, status: 'completed', lastReward: rewards,
@@ -334,6 +347,7 @@ export const TaskEngine = {
       const history = [...(store.history || []), historyEntry].slice(-500);
       const gold = (store.gold || 0) + rewards.gold;
       const rewardCoupons = rewards.coupon ? (store.rewardCoupons || 0) + 1 : store.rewardCoupons;
+      const freeGem = (store.freeGem || 0) + gemGain;
       const isCalActive = store.unlocks?.feature_cal || store.settings?.calMode;
       const cal = isCalActive && task.calories > 0
         ? {
@@ -344,7 +358,7 @@ export const TaskEngine = {
           ].slice(0, 30),
         }
         : store.cal;
-      return { tasks, history, gold, rewardCoupons, cal };
+      return { tasks, history, gold, rewardCoupons, freeGem, cal };
     });
 
     EventBus.emit(Events.Stats.ADD_PLAYER_EXP, { amount: rewards.exp });
@@ -358,7 +372,8 @@ export const TaskEngine = {
     const comboText = combo >= 2 ? ` 🔥 COMBO x${combo}!` : '';
     const enchantText = task.enchant?.boundAt ? ' ✦ 祝福加乘 x1.5' : '';
     const couponText = rewards.coupon ? ' 🎫 獲得金幣券！' : '';
-    EventBus.emit(Events.System.TOAST, `完成！+${rewards.gold}💰 +${rewards.exp}✨${comboText}${enchantText}${couponText}`);
+    const gemText = gemGain > 0 ? ` 💎+${gemGain}` : '';
+    EventBus.emit(Events.System.TOAST, `完成！+${rewards.gold}💰 +${rewards.exp}✨${gemText}${comboText}${enchantText}${couponText}`);
     EventBus.emit(Events.Task.COMPLETED, { task, impact, gained: rewards, combo });
     this._rollEggShardDrop();
   },
