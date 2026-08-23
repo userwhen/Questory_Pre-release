@@ -4,6 +4,8 @@ import { useGameStore, FALLBACK_TASK_CAT, BASE_TASK_CATS } from '@/core/state.js
 import { EventBus } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
 import { useRequestAction } from '@/hooks/useRequestAction.js';
+import { usePressGesture } from '@/hooks/usePressGesture.js';
+import { useConfirm } from '@/hooks/useConfirm.jsx';
 import { getSortedAchievements, getTierConfig, getUnitString } from '@/ach/utils/achSelectors.js';
 import { getShopItems } from '@/shop/utils/shopSelectors.js';
 import Modal from '@/ui/Modal.jsx';
@@ -38,6 +40,12 @@ function TierBadge({ tier }) {
 function AchCard({ ach, onClaim, onEdit, onCompleteContainer, containerReady }) {
   const isReady = ach.curr >= ach.target && !ach.claimed;
   const isClaimed = ach.claimed;
+  const canOpen = !ach.isSystem || ach.editable;
+
+  const { cardRef, pressHandlers } = usePressGesture({
+    onLongPress: () => canOpen && onEdit && onEdit(ach),
+    disabled: !canOpen,
+  });
 
   let displayTitle = ach.title;
   let icon = '🏅';
@@ -77,8 +85,9 @@ function AchCard({ ach, onClaim, onEdit, onCompleteContainer, containerReady }) 
 
   return (
     <div
-      style={{ ...achCardStyle, borderLeftColor: borderColor, opacity: isClaimed ? 0.55 : 1, cursor: (ach.isSystem && !ach.editable) ? 'default' : 'pointer' }}
-      onClick={() => (!ach.isSystem || ach.editable) && onEdit && onEdit(ach)}
+      ref={cardRef}
+      style={{ ...achCardStyle, borderLeftColor: borderColor, opacity: isClaimed ? 0.55 : 1, cursor: canOpen ? 'pointer' : 'default' }}
+      {...pressHandlers}
     >
       <div style={{ fontSize: 'var(--size-sm)', flexShrink: 0, lineHeight: 1, marginRight: 'var(--space-sm)' }}>{icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -221,6 +230,7 @@ function MilestoneFormModal({ initial, taskCats, skills, shopItems = [], allTask
     ? { ...initial }
     : { id: null, title: '', desc: '', targetType: 'tag', targetValue: taskCats[0] || FALLBACK_TASK_CAT, tier: 'C', isUpgradeable: false }
   );
+  const [askConfirm, confirmDialog] = useConfirm();
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
@@ -253,116 +263,126 @@ function MilestoneFormModal({ initial, taskCats, skills, shopItems = [], allTask
     onClose();
   };
 
+  const handleDeleteClick = () => {
+    askConfirm(
+      isContainer
+        ? '確定要刪除這個成就嗎？歸入的任務不會被刪除，但這個成就的設定與進度會一併消失，此動作無法復原。'
+        : '確定要刪除這個目標嗎？進度會一併消失，此動作無法復原。',
+      () => { onDelete(form.id); onClose(); }
+    );
+  };
+
   const typeOptions = [
     { value: 'tag', label: '🏷️ 任務分類' },
     { value: 'attr', label: '💪 技能鍛鍊' },
     { value: 'streak_tag', label: '🔥 連續分類' },
     { value: 'streak_attr', label: '🔥 連續技能' },
-    { value: 'focus_time', label: '⏱️ 專注時間' },
-    { value: 'pomodoro', label: '🍅 番茄農夫' },
   ];
 
   return (
-    <Modal
-      title={isEdit ? '編輯目標' : '建立新目標'}
-      onClose={onClose}
-      footer={
-        <>
-          {isEdit && !isSystemEditable && !isContainer && (
-            <button style={{ ...btnStyle, background: 'var(--color-danger,#c0392b)', border: 'none', boxShadow: '0 4px 0 var(--color-danger-dark,#922b21)' }} onClick={() => { onDelete(form.id); onClose(); }}>刪除</button>
-          )}
-          <button style={{ ...btnStyle, flex: 1 }} onClick={handleSave}>{isEdit ? '儲存' : '建立目標'}</button>
-        </>
-      }
-    >
-      <label style={labelStyle}>目標標題</label>
-      <input style={inputStyle} placeholder="例如：健身達人" value={form.title} onChange={e => set('title', e.target.value)} />
+    <>
+      <Modal
+        title={isEdit ? '編輯目標' : '建立新目標'}
+        onClose={onClose}
+        footer={
+          <>
+            {isEdit && !isSystemEditable && (
+              <button style={{ ...btnStyle, background: 'var(--color-danger,#c0392b)', border: 'none', boxShadow: '0 4px 0 var(--color-danger-dark,#922b21)' }} onClick={handleDeleteClick}>刪除</button>
+            )}
+            <button style={{ ...btnStyle, flex: 1 }} onClick={handleSave}>{isEdit ? '儲存' : '建立目標'}</button>
+          </>
+        }
+      >
+        <label style={labelStyle}>目標標題</label>
+        <input style={inputStyle} placeholder="例如：健身達人" value={form.title} onChange={e => set('title', e.target.value)} />
 
-      {isSystemEditable ? (
-        <>
-          <label style={{ ...labelStyle, marginTop: 'var(--space-xs)' }}>描述</label>
-          <textarea style={{ ...inputStyle, resize: 'none', minHeight: 'var(--size-lg)' }} value={form.desc || ''} onChange={e => set('desc', e.target.value)} placeholder="寫下這個成就對你的意義" />
-        </>
-      ) : isContainer ? (
-        <>
-          <label style={{ ...labelStyle, marginTop: 'var(--space-xs)' }}>描述（選填）</label>
-          <textarea style={{ ...inputStyle, resize: 'none', minHeight: 'var(--size-md)' }} value={form.desc || ''} onChange={e => set('desc', e.target.value)} placeholder="這個成就對你的意義" />
+        {isSystemEditable ? (
+          <>
+            <label style={{ ...labelStyle, marginTop: 'var(--space-xs)' }}>描述</label>
+            <textarea style={{ ...inputStyle, resize: 'none', minHeight: 'var(--size-lg)' }} value={form.desc || ''} onChange={e => set('desc', e.target.value)} placeholder="寫下這個成就對你的意義" />
+          </>
+        ) : isContainer ? (
+          <>
+            <label style={{ ...labelStyle, marginTop: 'var(--space-xs)' }}>描述（選填）</label>
+            <textarea style={{ ...inputStyle, resize: 'none', minHeight: 'var(--size-md)' }} value={form.desc || ''} onChange={e => set('desc', e.target.value)} placeholder="這個成就對你的意義" />
 
-          <div style={{ ...boxStyle, marginTop: 'var(--space-xs)' }}>
-            <label style={labelStyle}>已歸入的任務（{memberTaskTitles.length}）</label>
-            <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted)' }}>
-              {memberTaskTitles.length === 0 ? '尚無任務' : memberTaskTitles.join('、')}
+            <div style={{ ...boxStyle, marginTop: 'var(--space-xs)' }}>
+              <label style={labelStyle}>已歸入的任務（{memberTaskTitles.length}）</label>
+              <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted)' }}>
+                {memberTaskTitles.length === 0 ? '尚無任務' : memberTaskTitles.join('、')}
+              </div>
             </div>
-          </div>
 
-          <div style={{ ...boxStyle, marginTop: 'var(--space-xs)' }}>
-            <label style={labelStyle}>🎁 指定獎勵道具（選填，鑽石類商品不開放）</label>
-            <RewardItemPicker items={shopItems.filter(i => i.currency !== 'gem')} value={form.rewardItemId || ''} onChange={v => set('rewardItemId', v || null)} />
-          </div>
-
-          <div style={{ ...boxStyle, marginTop: 'var(--space-xs)' }}>
-            <label style={labelStyle}>🎫 附加金幣券（選填）</label>
-            <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
-              {[0, 1, 3, 5].map(n => (
-                <button key={n} type="button"
-                  style={{ ...tierBtnStyle, flex: 1, background: (form.rewardCoupons || 0) === n ? 'var(--color-correct,#227A59)' : 'var(--bg-card,#fff)', color: (form.rewardCoupons || 0) === n ? '#fff' : 'var(--text,#2c1a0e)', border: `1.5px solid ${(form.rewardCoupons || 0) === n ? 'var(--color-correct,#227A59)' : 'var(--border-input,#d5c5a8)'}` }}
-                  onClick={() => set('rewardCoupons', n)}>{n === 0 ? '不給' : `${n}張`}</button>
-              ))}
+            <div style={{ ...boxStyle, marginTop: 'var(--space-xs)' }}>
+              <label style={labelStyle}>🎁 指定獎勵道具（選填，鑽石類商品不開放）</label>
+              <RewardItemPicker items={shopItems.filter(i => i.currency !== 'gem')} value={form.rewardItemId || ''} onChange={v => set('rewardItemId', v || null)} />
             </div>
-          </div>
-        </>
-      ) : (
-        <>
-          <div style={{ ...boxStyle, marginTop: 'var(--space-xs)' }}>
-            <label style={labelStyle}>達成條件</label>
-            <select style={{ ...inputStyle, marginBottom: 'var(--space-xs)' }} value={form.targetType} onChange={e => set('targetType', e.target.value)}>
-              {typeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
 
-            <div>
-              {isStreak && <div style={{ color: 'var(--color-danger,#c0392b)', fontSize: 'var(--font-body)', marginBottom: 'var(--space-xs)', fontStyle: 'italic' }}>🔥 必須每天至少完成一項，中斷即歸零！</div>}
-              {form.targetType === 'focus_time' && <div style={hintTextStyle}>將根據每次專注的分鐘數累積</div>}
-              {form.targetType === 'pomodoro' && <div style={hintTextStyle}>完成一次番茄鐘累積 1 顆</div>}
-
-              {needsValueSelect && (
-                <>
-                  <label style={labelStyle}>{isAttr ? '選擇技能' : '選擇分類'}</label>
-                  {isAttr ? (
-                    <select style={inputStyle} value={form.targetValue} onChange={e => set('targetValue', e.target.value)}>
-                      {skills.map(sk => <option key={sk.name} value={sk.name}>{sk.name}</option>)}
-                    </select>
-                  ) : (
-                    <select style={inputStyle} value={form.targetValue} onChange={e => set('targetValue', e.target.value)}>
-                      {taskCats.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  )}
-                </>
-              )}
+            <div style={{ ...boxStyle, marginTop: 'var(--space-xs)' }}>
+              <label style={labelStyle}>🎫 附加金幣券（選填）</label>
+              <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                {[0, 1, 3, 5].map(n => (
+                  <button key={n} type="button"
+                    style={{ ...tierBtnStyle, flex: 1, background: (form.rewardCoupons || 0) === n ? 'var(--color-correct,#227A59)' : 'var(--bg-card,#fff)', color: (form.rewardCoupons || 0) === n ? '#fff' : 'var(--text,#2c1a0e)', border: `1.5px solid ${(form.rewardCoupons || 0) === n ? 'var(--color-correct,#227A59)' : 'var(--border-input,#d5c5a8)'}` }}
+                    onClick={() => set('rewardCoupons', n)}>{n === 0 ? '不給' : `${n}張`}</button>
+                ))}
+              </div>
             </div>
-          </div>
+          </>
+        ) : (
+          <>
+            <div style={{ ...boxStyle, marginTop: 'var(--space-xs)' }}>
+              <label style={labelStyle}>達成條件</label>
+              <select style={{ ...inputStyle, marginBottom: 'var(--space-xs)' }} value={form.targetType} onChange={e => set('targetType', e.target.value)}>
+                {typeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
 
-          <div style={{ ...boxStyle, marginTop: 'var(--space-xs)', borderColor: 'var(--color-gold,#f5a623)', background: 'var(--color-gold-soft,#fef3c7)' }}>
-            <label style={labelStyle}>難度層級</label>
-            <div style={{ display: 'flex', gap: 'var(--space-xs)', marginBottom: 'var(--space-xs)' }}>
-              {['S', 'A', 'B', 'C'].map(t => (
-                <button key={t} style={{ ...tierBtnStyle, flex: 1, background: form.tier === t ? 'var(--color-correct,#227A59)' : 'var(--bg-card,#fff)', color: form.tier === t ? '#fff' : 'var(--text,#2c1a0e)', border: `1.5px solid ${form.tier === t ? 'var(--color-correct,#227A59)' : 'var(--border-input,#d5c5a8)'}` }} onClick={() => set('tier', t)}>{t}</button>
-              ))}
-            </div>
-            <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-2,#5c3d2e)', background: 'rgba(255,255,255,0.5)', padding: 'var(--space-xs)', borderRadius: 'var(--radius-sm,8px)' }}>
-              <div>🎯 目標：累積完成 <b>{config.target}</b> {unitStr}</div>
-              <div>🎁 獎勵：💰{config.reward.gold} ✨{config.reward.exp}</div>
-            </div>
-          </div>
+              <div>
+                {isStreak && <div style={{ color: 'var(--color-danger,#c0392b)', fontSize: 'var(--font-body)', marginBottom: 'var(--space-xs)', fontStyle: 'italic' }}>🔥 必須每天至少完成一項，中斷即歸零！</div>}
+                {form.targetType === 'focus_time' && <div style={hintTextStyle}>將根據每次專注的分鐘數累積</div>}
+                {form.targetType === 'pomodoro' && <div style={hintTextStyle}>完成一次番茄鐘累積 1 顆</div>}
 
-          <div style={{ ...boxStyle, marginTop: 'var(--space-xs)' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', cursor: 'pointer', fontSize: 'var(--font-body)', color: 'var(--text)' }}>
-              <input type="checkbox" checked={form.isUpgradeable} onChange={() => set('isUpgradeable', !form.isUpgradeable)} style={{ width: 'var(--size-xs)', height: 'var(--size-xs)', accentColor: 'var(--color-correct,#227A59)' }} />
-              達成後自動開啟下一階段挑戰
-            </label>
-          </div>
-        </>
-      )}
-    </Modal>
+                {needsValueSelect && (
+                  <>
+                    <label style={labelStyle}>{isAttr ? '選擇技能' : '選擇分類'}</label>
+                    {isAttr ? (
+                      <select style={inputStyle} value={form.targetValue} onChange={e => set('targetValue', e.target.value)}>
+                        {skills.map(sk => <option key={sk.name} value={sk.name}>{sk.name}</option>)}
+                      </select>
+                    ) : (
+                      <select style={inputStyle} value={form.targetValue} onChange={e => set('targetValue', e.target.value)}>
+                        {taskCats.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div style={{ ...boxStyle, marginTop: 'var(--space-xs)', borderColor: 'var(--color-gold,#f5a623)', background: 'var(--color-gold-soft,#fef3c7)' }}>
+              <label style={labelStyle}>難度層級</label>
+              <div style={{ display: 'flex', gap: 'var(--space-xs)', marginBottom: 'var(--space-xs)' }}>
+                {['S', 'A', 'B', 'C'].map(t => (
+                  <button key={t} style={{ ...tierBtnStyle, flex: 1, background: form.tier === t ? 'var(--color-correct,#227A59)' : 'var(--bg-card,#fff)', color: form.tier === t ? '#fff' : 'var(--text,#2c1a0e)', border: `1.5px solid ${form.tier === t ? 'var(--color-correct,#227A59)' : 'var(--border-input,#d5c5a8)'}` }} onClick={() => set('tier', t)}>{t}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-2,#5c3d2e)', background: 'rgba(255,255,255,0.5)', padding: 'var(--space-xs)', borderRadius: 'var(--radius-sm,8px)' }}>
+                <div>🎯 目標：累積完成 <b>{config.target}</b> {unitStr}</div>
+                <div>🎁 獎勵：💰{config.reward.gold} ✨{config.reward.exp}</div>
+              </div>
+            </div>
+
+            <div style={{ ...boxStyle, marginTop: 'var(--space-xs)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', cursor: 'pointer', fontSize: 'var(--font-body)', color: 'var(--text)' }}>
+                <input type="checkbox" checked={form.isUpgradeable} onChange={() => set('isUpgradeable', !form.isUpgradeable)} style={{ width: 'var(--size-xs)', height: 'var(--size-xs)', accentColor: 'var(--color-correct,#227A59)' }} />
+                達成後自動開啟下一階段挑戰
+              </label>
+            </div>
+          </>
+        )}
+      </Modal>
+      {confirmDialog}
+    </>
   );
 }
 
@@ -520,14 +540,12 @@ export default function AchPage({ onRegisterBack } = {}) {
     EventBus.emit(Events.Ach.REQUEST_COMPLETE_CONTAINER, { id, requestId: Date.now() });
   }, []);
 
-  const handleSaveMilestone = useCallback(form => {
-    if (!form?.id) return; // 已拔掉「建立新目標」，僅允許編輯既有
+    const handleSaveMilestone = useCallback(form => {
+    if (!form?.id) return;
     if (form.isSystem && form.editable) {
       EventBus.emit(Events.Ach.REQUEST_UPDATE_TEXT, { id: form.id, title: form.title, desc: form.desc });
     } else if (form.targetType === 'manual_group') {
-      EventBus.emit(Events.Ach.REQUEST_UPDATE_CONTAINER, { id: form.id, title: form.title, desc: form.desc, rewardItemId: form.rewardItemId || null, rewardCoupons: form.rewardCoupons || 0 });
-    } else {
-      EventBus.emit(Events.Ach.REQUEST_UPDATE_MILESTONE, form);
+      EventBus.emit(Events.Ach.REQUEST_UPDATE_CONTAINER, { id: form.id, title: form.title, desc: form.desc, rewardItemId: form.rewardItemId || null });
     }
   }, []);
 

@@ -17,7 +17,7 @@ import { Ads } from '@/plugins/ads.js';
 import { RewardEngine } from '@/reward/engines/reward.js';
 import { AvatarEngine } from '@/avatar/engines/avatar.js';
 import { SettingsEngine } from '@/settings/engines/settings.js';
-import { StageEngine } from '@/main-stage/Engines/stage.js';
+import { StageEngine } from '@/main-stage/engines/stage.js';
 
 // 初版裁切：不 init 的引擎（保留檔案，之後要開回來只要把 import + init 加回來）
 //   StoryBridge / narrativeEngine  — Story 全系統

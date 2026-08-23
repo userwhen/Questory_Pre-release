@@ -17,6 +17,10 @@ export const StatsEngine = {
     const unsubDeleteSkill = EventBus.on(Events.Stats.REQUEST_DELETE_SKILL, ({ name }) => {
       this.deleteSkill(name);
     });
+    // 技能大師成就在 Ach 頁面被領取後，才真的把技能搬進 archivedSkills（見 ach.js 的 claimReward）
+    const unsubArchiveSkill = EventBus.on(Events.Stats.REQUEST_ARCHIVE_SKILL, ({ skillName }) => {
+      this.archiveSkill(skillName);
+    });
     // 加在 unsubDeleteSkill 後面
     const unsubCalTruth = EventBus.on(Events.Stats.REQUEST_CALORIE_TRUTH, () => {
       EventBus.emit(Events.Stats.CALORIE_TRUTH_READY, this.getCalorieTruth());
@@ -30,7 +34,7 @@ export const StatsEngine = {
       EventBus.emit(Events.Stats.SKILL_ICON_MAP_READY, this.getSkillIconMap());
     });
 
-    return [unsubAdd, unsubReduce, unsubAddExp, unsubReduceExp, unsubSaveSkill, unsubDeleteSkill, unsubCalTruth, unsubPopBall, unsubIconMap];
+    return [unsubAdd, unsubReduce, unsubAddExp, unsubReduceExp, unsubSaveSkill, unsubDeleteSkill, unsubArchiveSkill, unsubCalTruth, unsubPopBall, unsubIconMap];
   }),
 
   // ─── 玩家經驗值 ─────────────────────────────────────
@@ -70,31 +74,40 @@ export const StatsEngine = {
     EventBus.emit(Events.Stats.UPDATED);
   },
 
-  // ─── 技能熟練度 ─────────────────────────────────────
+    // ─── 技能熟練度 ─────────────────────────────────────
   addSkillProficiency(skillName, amount = 1) {
     setState(s => {
       let skills = s.skills.map(sk => ({ ...sk }));
       let attrs = JSON.parse(JSON.stringify(s.attrs || {}));
-      const archived = [...(s.archivedSkills || [])];
       const idx = skills.findIndex(sk => sk.name === skillName);
 
       if (idx > -1) {
         const sk = skills[idx];
-        sk.lastUsed = Date.now();
-        sk.exp = (sk.exp || 0) + amount;
 
-        let maxedOut = false;
-        while (!maxedOut && sk.exp >= sk.lv * 10) {
-          sk.exp -= sk.lv * 10;
-          sk.lv++;
-          EventBus.emit(Events.System.TOAST, `💡 技能 [${sk.name}] 升至 Lv.${sk.lv}`);
-          if (sk.lv >= 10 && !sk.isMaxed) {
-            sk.isMaxed = true;
-            maxedOut = true;
-            EventBus.emit(Events.Stats.SKILL_MAXED, sk);
-            archived.push({ ...sk });
-            skills.splice(idx, 1);
-            EventBus.emit(Events.System.TOAST, `🎉 [${sk.name}] 達到大師級！移至榮譽殿堂`);
+        // 已經大師化（等待玩家去 Ach 頁面領取）：技能本身經驗/等級凍結不再變動，
+        // 但父屬性仍然照常吃經驗——大師只是技能這條進度線封頂，屬性成長不受影響。
+        if (!sk.isMaxed) {
+          sk.lastUsed = Date.now();
+          sk.exp = (sk.exp || 0) + amount;
+
+          // practiceDays：同一天內重複練習只算一次，反映「真正有練習的天數」，
+          // 供 ach.js 的技能大師成就計算動態獎勵用（見 onSkillMaxed）。
+          const todayStr = new Date().toDateString();
+          if (sk.lastPracticeDate !== todayStr) {
+            sk.practiceDays = (sk.practiceDays || 0) + 1;
+            sk.lastPracticeDate = todayStr;
+          }
+
+          while (sk.exp >= sk.lv * 10) {
+            sk.exp -= sk.lv * 10;
+            sk.lv++;
+            EventBus.emit(Events.System.TOAST, `💡 技能 [${sk.name}] 升至 Lv.${sk.lv}`);
+            if (sk.lv >= 10) {
+              sk.isMaxed = true;
+              EventBus.emit(Events.Stats.SKILL_MAXED, sk);
+              EventBus.emit(Events.System.TOAST, `🎉 [${sk.name}] 達到大師級！前往成就頁領取獎勵`);
+              break;
+            }
           }
         }
 
@@ -105,12 +118,13 @@ export const StatsEngine = {
         attrs = this._mutAddAttrExp(attrs, skillName, amount);
       }
 
-      return { skills, attrs, archivedSkills: archived };
+      return { skills, attrs };
     });
     EventBus.emit(Events.Stats.UPDATED);
   },
 
-  // 取消完成＝完整還原：技能等級與父屬性一律回扣（方案甲），不再只在嚴格模式生效。
+    // 取消完成＝完整還原：技能等級與父屬性一律回扣（方案甲），不再只在嚴格模式生效。
+  // 已大師化（isMaxed）的技能凍結中，不回扣經驗/等級，但父屬性依然照常回扣。
   reduceSkillProficiency(skillName, amount = 1) {
     setState(s => {
       let attrs = JSON.parse(JSON.stringify(s.attrs || {}));
@@ -119,6 +133,7 @@ export const StatsEngine = {
       const skills = s.skills.map(sk => {
         if (sk.name !== skillName) return sk;
         targetParent = sk.parent;
+        if (sk.isMaxed) return sk;
         let exp = (sk.exp || 0) - amount;
         let lv = sk.lv;
         while (exp < 0 && lv > 1) {
@@ -191,9 +206,16 @@ export const StatsEngine = {
       attrs: h.attrs?.map(a => a === editId ? name : a) ?? [],
     })),
     // 級聯更新：技能改名要連動追蹤該技能的成就/里程碑，避免資料斷鏈
-    achievements: (st.achievements || []).map(a =>
-      (a.targetType === 'attr' || a.targetType === 'streak_attr') && a.targetValue === editId
-        ? { ...a, targetValue: name } : a),
+    // skill_mastery 額外要把 title 裡的舊技能名也換掉，不然文案會卡在改名前的舊名字
+    achievements: (st.achievements || []).map(a => {
+      if (a.targetType === 'skill_mastery' && a.targetValue === editId) {
+        return { ...a, targetValue: name, title: `【技能大成】${name}` };
+      }
+      if ((a.targetType === 'attr' || a.targetType === 'streak_attr') && a.targetValue === editId) {
+        return { ...a, targetValue: name };
+      }
+      return a;
+    }),
     milestones: (st.milestones || []).map(m =>
       (m.targetType === 'attr' || m.targetType === 'streak_attr') && m.targetValue === editId
         ? { ...m, targetValue: name } : m),
@@ -229,7 +251,25 @@ export const StatsEngine = {
     };
   });
   EventBus.emit(Events.Stats.UPDATED);
+  // 通知 ach.js：如果這隻技能還掛著未領取的 skill_mastery 成就，要一併清掉
+  EventBus.emit(Events.Stats.SKILL_DELETED, { name });
 },
+
+  // 技能大師成就在 Ach 頁面被領取的那一刻才呼叫（見 ach.js 的 claimReward），
+  // 真正把技能從 skills 搬進 archivedSkills；在那之前技能只是 isMaxed=true 凍結著，還留在 skills 裡等玩家去領。
+  archiveSkill(skillName) {
+    setState(s => {
+      const idx = s.skills.findIndex(sk => sk.name === skillName);
+      if (idx === -1) return s; // 技能可能領取前就被刪除了，安全跳過
+      const skills = [...s.skills];
+      const [archivedSkill] = skills.splice(idx, 1);
+      return {
+        skills,
+        archivedSkills: [...(s.archivedSkills || []), archivedSkill],
+      };
+    });
+    EventBus.emit(Events.Stats.UPDATED);
+  },
   // 給 TaskCard 等「不能直接讀 Stats 相關 store 欄位」的地方用：
   // 一次要到「技能名稱 → 圖標」的完整對照表，Task 那邊只要查表，不用碰 attrs/skills 本體
   getSkillIconMap() {

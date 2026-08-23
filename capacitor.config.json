@@ -3,9 +3,9 @@
   "appName": "Questory",
   "webDir": "dist",
   "server": {
-   "url": "http://192.168.68.60:5174",
-    "cleartext": true
-  },
+  "url": "http://localhost:5174",
+  "cleartext": true
+},
   "android": {
     "allowMixedContent": false
   }

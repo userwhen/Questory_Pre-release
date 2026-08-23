@@ -28,15 +28,15 @@ export const AchEngine = {
       const result = this.claimReward(id);
       EventBus.emit(Events.Ach.CLAIM_REWARD_RESULT, { ...result, requestId });
     });
-    const unsubUpdateMs = EventBus.on(Events.Ach.REQUEST_UPDATE_MILESTONE, (data) => {
-      this.updateMilestone(data);
-    });
     const unsubDeleteMs = EventBus.on(Events.Ach.REQUEST_DELETE_MILESTONE, ({ id }) => {
       this.deleteMilestone(id);
     });
 
     const unsubSkillMaxed = EventBus.on(Events.Stats.SKILL_MAXED, (skill) => {
       this.onSkillMaxed(skill);
+    });
+    const unsubSkillDeleted = EventBus.on(Events.Stats.SKILL_DELETED, ({ name }) => {
+      this.onSkillDeleted(name);
     });
     const unsubAttrLevelUp = EventBus.on(Events.Stats.ATTR_LEVEL_UP, ({ key, v }) => {
       this.onAttrLevelUp(key, v);
@@ -57,13 +57,13 @@ export const AchEngine = {
     const unsubUpdateText = EventBus.on(Events.Ach.REQUEST_UPDATE_TEXT, ({ id, title, desc }) => {
       this.updateAchievementText(id, title, desc);
     });
-    const unsubUpdateContainer = EventBus.on(Events.Ach.REQUEST_UPDATE_CONTAINER, ({ id, title, desc, rewardItemId, rewardCoupons }) => {
-      this.updateContainerMeta(id, { title, desc, rewardItemId, rewardCoupons });
+    const unsubUpdateContainer = EventBus.on(Events.Ach.REQUEST_UPDATE_CONTAINER, ({ id, title, desc, rewardItemId }) => {
+      this.updateContainerMeta(id, { title, desc, rewardItemId });
     });
 
     return [unsubTag, unsubTaskDone, unsubTaskUndone, unsubTimer,
-      unsubClaim, unsubUpdateMs, unsubDeleteMs,
-      unsubSkillMaxed, unsubAttrLevelUp, unsubCreateContainer, unsubAddMember, unsubRemoveMember,
+      unsubClaim, unsubDeleteMs,
+      unsubSkillMaxed, unsubSkillDeleted, unsubAttrLevelUp, unsubCreateContainer, unsubAddMember, unsubRemoveMember,
       unsubCompleteContainer, unsubUpdateText, unsubUpdateContainer];
   }),
 
@@ -261,6 +261,12 @@ export const AchEngine = {
     });
 
     if (reward.exp) EventBus.emit(Events.Stats.ADD_PLAYER_EXP, { amount: reward.exp });
+
+    // 技能大師成就：玩家實際按下領取的這一刻，才真的通知 stats.js 把技能移進 archivedSkills
+    if (ms.targetType === 'skill_mastery') {
+      EventBus.emit(Events.Stats.REQUEST_ARCHIVE_SKILL, { skillName: ms.targetValue });
+    }
+
     return { success: true, reward };
   },
 
@@ -271,18 +277,21 @@ export const AchEngine = {
     );
     if (exists) return;
 
-    const newAchs = ['C', 'B', 'A', 'S'].map(tier => {
-      const config = this.getTierConfig(tier, 'tag');
-      return {
-        id: `ach_tag_${tagValue}_${tier}`, title: `【${tagValue}】${tier}`,
-        desc: `累積完成 ${config.target} 次`, type: 'progress', targetType: 'tag',
-        targetValue: tagValue, tier, curr: 0, target: config.target,
-        reward: config.reward, done: false, claimed: false, isSystem: true,
-        editable: true, isUpgradeable: false, finishDate: null,
-      };
-    });
+    // 只生 C 階；B/A/S 改由 claimReward() 裡既有的 isUpgradeable/nextTierMap
+    // 機制在玩家實際領取當階獎勵後才動態生成，不再一次把 C~S 全部生出來、
+    // 讓還沒真正開始挑戰的高階成就就先出現在列表裡。
+    // id 改用 `_tier_` 分隔（跟 claimReward() 的 baseId 切法一致），
+    // title 拿掉尾巴的階級字母——TierBadge 已經會顯示階級，不用在文字裡重複。
+    const config = this.getTierConfig('C', 'tag');
+    const newAch = {
+      id: `ach_tag_${tagValue}_tier_C`, title: `【${tagValue}】`,
+      desc: `累積完成 ${config.target} 次`, type: 'progress', targetType: 'tag',
+      targetValue: tagValue, tier: 'C', curr: 0, target: config.target,
+      reward: config.reward, done: false, claimed: false, isSystem: true,
+      editable: true, isUpgradeable: true, finishDate: null,
+    };
 
-    setState(state => ({ achievements: [...(state.achievements || []), ...newAchs] }));
+    setState(state => ({ achievements: [...(state.achievements || []), newAch] }));
   },
 
   onSkillMaxed(skill) {
@@ -290,15 +299,32 @@ export const AchEngine = {
     const s = getState();
     if ((s.achievements || []).some(a => a.id === id)) return;
 
+    // 動態獎勵：依「真正有練習的天數」（stats.js 的 practiceDays，同一天只算一次）計算，
+    // 練越久獎勵越高，設上限避免無限膨脹。
+    const days = skill.practiceDays || 1;
+    const reward = {
+      gold: Math.min(800, 100 + days * 15),
+      exp: Math.min(1200, 150 + days * 20),
+    };
+
     const newAch = {
       id, title: `【技能大成】${skill.name}`,
       desc: `${skill.name} 練至大師級（Lv.10）`, type: 'progress',
       targetType: 'skill_mastery', targetValue: skill.name, tier: null,
-      curr: 1, target: 1, reward: { gold: 300, exp: 500 },
-      done: true, claimed: false, isSystem: true, editable: true, isUpgradeable: false,
+      curr: 1, target: 1, reward,
+      done: true, claimed: false, isSystem: true, editable: false, isUpgradeable: false,
       finishDate: Date.now(),
     };
     setState(state => ({ achievements: [...(state.achievements || []), newAch] }));
+  },
+
+  // 技能被刪除時，如果對應的技能大師成就還沒被領取，一併清掉（避免孤兒成就）。
+  // 已經領取過的維持不動，玩家已經拿到的獎勵跟殿堂紀錄不該因為刪技能而消失。
+  onSkillDeleted(name) {
+    setState(s => ({
+      achievements: (s.achievements || []).filter(a =>
+        !(a.targetType === 'skill_mastery' && a.targetValue === name && !a.claimed)),
+    }));
   },
 
   onAttrLevelUp(key, v) {
@@ -318,7 +344,7 @@ export const AchEngine = {
     const newAch = {
       id: 'ach_container_' + Date.now(), title: title || '未命名成就', desc: '',
       type: 'container', targetType: 'manual_group', memberTaskIds: [taskId],
-      tier: null, curr: 0, target: null, reward: null, rewardItemId: null, rewardCoupons: 0,
+      tier: null, curr: 0, target: null, reward: null, rewardItemId: null,
       done: false, claimed: false, isSystem: false, isUpgradeable: false, finishDate: null,
     };
     setState(s => ({ achievements: [...(s.achievements || []), newAch] }));
@@ -361,10 +387,9 @@ export const AchEngine = {
     }));
     if (reward.exp) EventBus.emit(Events.Stats.ADD_PLAYER_EXP, { amount: reward.exp });
     if (ach.rewardItemId) EventBus.emit(Events.Shop.REQUEST_GRANT_ITEM, { id: ach.rewardItemId, qty: 1 });
-    if (ach.rewardCoupons > 0) getState().addRewardCoupon(ach.rewardCoupons);
 
     return {
-      success: true, reward, rewardItemId: ach.rewardItemId, rewardCoupons: ach.rewardCoupons || 0,
+      success: true, reward, rewardItemId: ach.rewardItemId,
       summary: { count: memberTasks.length, totalDifficulty, byCat },
     };
   },
@@ -383,37 +408,15 @@ export const AchEngine = {
     }));
   },
 
-  updateMilestone(data) {
-    setState(s => {
-      const milestones = (s.milestones || []).map(ms => {
-        if (ms.id !== data.id) return ms;
-
-        let updated = { ...ms, title: data.title, isUpgradeable: data.isUpgradeable || false };
-
-        if (ms.tier !== data.tier || ms.targetType !== data.targetType) {
-          const config = this.getTierConfig(data.tier, data.targetType);
-          const unit = this.getUnitString(data.targetType);
-          updated = {
-            ...updated, tier: data.tier, targetType: data.targetType,
-            targetValue: data.targetValue, target: config.target,
-            reward: config.reward, desc: `累積完成 ${config.target} ${unit}`,
-          };
-        }
-
-        if (updated.curr >= updated.target && !updated.done) {
-          updated.done = true;
-          updated.finishDate = Date.now();
-        }
-
-        return updated;
-      });
-
-      return { milestones };
-    });
-  },
-
+  // 命名維持 deleteMilestone 不變（呼叫端事件名稱、AchPage.jsx 都沿用這個字），
+  // 但實際上 milestones/achievements 兩個陣列都要篩，因為現在唯一還在用的
+  // 刪除入口是容器成就（存在 achievements 裡），先前只篩 milestones 那份、
+  // 沒篩到 achievements，容器的刪除鈕點下去其實沒有真的刪掉東西。
   deleteMilestone(id) {
-    setState(s => ({ milestones: (s.milestones || []).filter(m => m.id !== id) }));
+    setState(s => ({
+      milestones: (s.milestones || []).filter(m => m.id !== id),
+      achievements: (s.achievements || []).filter(a => a.id !== id),
+    }));
   },
 
   getSortedAchievements(milestones, achievements) {

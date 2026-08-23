@@ -40,6 +40,25 @@ function BuyModal({ item, onClose }) {
   const canAfford = item.currency === 'gold' ? gold >= totalCost : totalGem >= totalCost;
   const currIcon = item.currency === 'gold' ? '💰' : '💎';
 
+  // ── 長按 +/− 直接跳最小/最大值；輕點維持原本 ±1 ──
+  // pointerdown 起一個 500ms 計時器，時間到就跳極值並標記已觸發；
+  // pointerup 時如果還沒觸發（沒撐滿 500ms），才當作一般輕點 ±1。
+  const holdTimer = useRef(null);
+  const holdFired = useRef(false);
+  const startHold = (jumpAction) => {
+    holdFired.current = false;
+    clearTimeout(holdTimer.current);
+    holdTimer.current = setTimeout(() => {
+      holdFired.current = true;
+      jumpAction();
+    }, 500);
+  };
+  const endHold = (tapAction) => {
+    clearTimeout(holdTimer.current);
+    if (!holdFired.current) tapAction();
+  };
+  const cancelHold = () => clearTimeout(holdTimer.current);
+
   const { run, loading: buying } = useRequestAction();
   const handleBuy = () => run(Events.Shop.REQUEST_BUY_ITEM, Events.Shop.BUY_ITEM_RESULT, { id: item.id, qty }, {
     successMsg: '✅ 購買成功！',
@@ -60,10 +79,16 @@ function BuyModal({ item, onClose }) {
           <div style={{ fontWeight: 800, fontSize: 'var(--font-title)', marginBottom: 'var(--space-xs)', color: 'var(--text, #2c1a0e)' }}>{item.name}</div>
           {item.desc && <div style={{ fontSize: 'var(--font-body)', color: 'var(--text-muted, #8c6e52)', marginBottom: 'var(--space-md)' }}>{item.desc}</div>}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-xs)', marginBottom: 'var(--space-md)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 'var(--space-xs)', marginBottom: 'var(--space-md)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
               <span style={qtyLabelStyle}>MIN</span>
-              <button style={qtyBtnStyle} onClick={() => setQty(q => Math.max(1, q - 1))}>－</button>
+              <button
+                style={qtyBtnStyle}
+                onPointerDown={() => startHold(() => setQty(1))}
+                onPointerUp={() => endHold(() => setQty(q => Math.max(1, q - 1)))}
+                onPointerLeave={cancelHold}
+                onPointerCancel={cancelHold}
+              >－</button>
             </div>
             <input
               type="number"
@@ -75,7 +100,13 @@ function BuyModal({ item, onClose }) {
             />
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
               <span style={qtyLabelStyle}>MAX</span>
-              <button style={qtyBtnStyle} onClick={() => setQty(q => Math.min(item.qty, q + 1))}>＋</button>
+              <button
+                style={qtyBtnStyle}
+                onPointerDown={() => startHold(() => setQty(item.qty))}
+                onPointerUp={() => endHold(() => setQty(q => Math.min(item.qty, q + 1)))}
+                onPointerLeave={cancelHold}
+                onPointerCancel={cancelHold}
+              >＋</button>
             </div>
           </div>
 
@@ -93,6 +124,12 @@ function BuyModal({ item, onClose }) {
   );
 }
 
+function formatCountdown(ms) {
+  const totalMin = Math.max(0, Math.ceil(ms / 60000));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h} 小時 ${m} 分` : `${m} 分`;
+}
 function formatCountdownShort(ms) {
   const totalMin = Math.max(0, Math.ceil(ms / 60000));
   const h = Math.floor(totalMin / 60);
@@ -410,13 +447,17 @@ function BagDrawer({ isOpen, onToggle, onUseItem }) {
 
 /* ─── 主頁面 ─────────────────────────────────────────── */
 const NPC_LINES = [
-  '歡迎光臨！今日有新貨喔～',
-  '需要什麼儘管說，別客氣！',
-  '最近進了不少好東西呢。',
-  '優質商品，童叟無欺！',
-  '今天手氣不錯，多買一點吧？',
-  '今天下面也有一些不錯的優惠喔，可以看看～',
+  { text: '歡迎光臨！今日有新貨喔～' },
+  { text: '需要什麼儘管說，別客氣！' },
+  { text: '最近進了不少好東西呢。' },
+  { text: '優質商品，童叟無欺！' },
+  { text: '今天手氣不錯，多買一點吧？' },
+  { text: '今天下面也有一些不錯的優惠喔，可以看看～' },
+  { text: '要不要看段影片，說不定能挖到寶石？', ad: true },
 ];
+
+const AD_COOLDOWN_MS = 30 * 60 * 1000; // 廣告冷卻 30 分鐘
+const AD_REWARD_TIERS_TOTAL = 5; // 對應 shop.js 的 AD_REWARD_TABLE 長度，這裡只用來判斷今日額度是否發完，實際鑽石量由 shop.js 算
 
 export default function ShopPage() {
   const [cat, setCat] = useState('全部');
@@ -425,22 +466,75 @@ export default function ShopPage() {
   const [uploadItem, setUploadItem] = useState(undefined);
   const [bagOpen, setBagOpen] = useState(false);
   const [npcIdx, setNpcIdx] = useState(0);
+  const [adNow, setAdNow] = useState(Date.now());
   const topBannerRef = useRef(null);
+  const { run: runAdReward } = useRequestAction();
 
   const npcCurrent = NPC_LINES[npcIdx % NPC_LINES.length];
   const handleNpcClick = () => setNpcIdx(i => (i + 1) % NPC_LINES.length);
 
-  // 商店最上方的橫幅：只要在這頁、且廣告該顯示，就持續嘗試顯示原生橫幅。
-  // NPC 泡泡不再參與廣告輪播，全站目前只有這裡是真正接原生 SDK 的廣告版位。
+  const shopAd = useGameStore(s => s.shopAd);
+  const adCooldownRemainMs = shopAd?.lastWatchAt ? Math.max(0, AD_COOLDOWN_MS - (adNow - shopAd.lastWatchAt)) : 0;
+  const adOnCooldown = adCooldownRemainMs > 0;
+  const adRewardsLeft = AD_REWARD_TIERS_TOTAL - (shopAd?.rewardsGivenToday ?? 0);
+  const adButtonLabel = adOnCooldown
+    ? `還要 ${formatCountdown(adCooldownRemainMs)} 才能看喔`
+    : (adRewardsLeft > 0 ? '點擊觀看廣告獲得鑽石' : '鑽石送完了，點擊廣告支持創作者');
+
+  // 冷卻倒數：只有真的在冷卻中才需要每 30 秒 tick 一次刷新畫面
+  useEffect(() => {
+    if (!adOnCooldown) return;
+    const t = setInterval(() => setAdNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, [adOnCooldown]);
+
+  // 🔧【暫時診斷用，找到問題後刪掉】全域攔截，不管崩潰發生在哪一段都會印出來
+  useEffect(() => {
+    const onRejection = (e) => console.error('[診斷][全域] 未攔截的 Promise rejection:', e.reason);
+    const onError = (e) => console.error('[診斷][全域] 未攔截的錯誤:', e.error || e.message);
+    window.addEventListener('unhandledrejection', onRejection);
+    window.addEventListener('error', onError);
+    return () => {
+      window.removeEventListener('unhandledrejection', onRejection);
+      window.removeEventListener('error', onError);
+    };
+  }, []);
+
+    const handleWatchAd = async () => {
+    console.log('[診斷] handleWatchAd 開始，事件常數：', Events.Shop.REQUEST_AD_REWARD, Events.Shop.AD_REWARD_RESULT);
+    try {
+      const result = await Ads.showRewarded(Ads.PLACEMENTS.REWARDED_SHOP_DIAMONDS);
+      console.log('[診斷] showRewarded 回傳：', result);
+      if (!result.completed) return;
+      runAdReward(Events.Shop.REQUEST_AD_REWARD, Events.Shop.AD_REWARD_RESULT, {}, {
+        successMsg: (r) => r.granted > 0 ? `💎 獲得 ${r.granted} 顆鑽石！` : '❤️ 感謝支持！',
+        failMsg: (r) => `❌ ${r?.msg || '發放失敗'}`,
+        timeoutMsg: '❌ 逾時，請稍後再試',
+      });
+      console.log('[診斷] runAdReward 已呼叫');
+    } catch (e) {
+      console.error('[診斷] handleWatchAd 內部例外：', e);
+      throw e;
+    }
+  };
+  // 商店最上方的橫幅：只要在這頁、廣告該顯示、且沒有任何彈出視窗擋著，就嘗試顯示原生橫幅；
+  // 只要有任一彈窗開著就先隱藏，避免橫幅疊在彈窗上面蓋住內容。
+  const anyModalOpen = !!buyTarget || !!useTarget || uploadItem !== undefined || bagOpen;
   useEffect(() => {
     if (!Ads.shouldShowAds() || Ads.ADS_MODE !== 'live') return;
+    if (anyModalOpen) {
+      Ads.hideBanner();
+      return;
+    }
     const el = topBannerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    Ads.showBanner(Ads.PLACEMENTS.SHOP_BANNER, rect.top);
+    const BANNER_MARGIN_ADJUST = 53; // 手動校正值：往上移多少 px，數字要在裝置上實測微調，不是算出來的
+    console.log('[Ads] 廣告版位量到的 top:', rect.top, '校正後:', rect.top - BANNER_MARGIN_ADJUST);
+    Ads.showBanner(Ads.PLACEMENTS.SHOP_BANNER, rect.top - BANNER_MARGIN_ADJUST);
     return () => { Ads.hideBanner(); };
-  }, []);
-
+  }, [anyModalOpen]);
+  
   const sysShop = useGameStore(s => s.sysShop);
   const userShopItems = useGameStore(s => s.shop?.user);
   const activePets = useGameStore(s => s.activePets);
@@ -465,9 +559,20 @@ export default function ShopPage() {
 
         <img src="img/tavern_front.png" alt="" style={npcSceneFrontStyle} onError={e => { e.target.style.opacity = '0'; }} />
 
-        <div style={npcBubbleStyle} onClick={handleNpcClick}>
-          <div style={npcArrowStyle} />
-          <span style={{ fontWeight: 700, fontSize: 'var(--font-title)', color: 'var(--text, #2c1a0e)' }}>{npcCurrent}</span>
+        <div style={npcBubbleWrapStyle}>
+          <div style={npcBubbleStyle}>
+            <div style={npcArrowStyle} />
+            <span style={{ fontWeight: 700, fontSize: 'var(--font-title)', color: 'var(--text, #2c1a0e)' }}>{npcCurrent.text}</span>
+          </div>
+          {npcCurrent.ad && (
+            <button
+              style={{ ...npcAdBtnStyle, opacity: adOnCooldown ? 0.5 : 1, cursor: adOnCooldown ? 'not-allowed' : 'pointer' }}
+              disabled={adOnCooldown}
+              onClick={handleWatchAd}
+            >
+              {adButtonLabel}
+            </button>
+          )}
         </div>
       </div>
       {Ads.ADS_MODE === 'live'
@@ -539,8 +644,10 @@ const npcAreaStyle = { flexShrink: 0, position: 'relative', height: 130, overflo
 const npcSceneBackStyle = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', zIndex: 1 };
 const npcSpriteImgStyle = { width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'bottom', pointerEvents: 'none' };
 const npcSpriteWrapStyle = { position: 'absolute', left: '3%', bottom: 0, width: '42%', height: '100%', zIndex: 2, cursor: 'pointer' };
-const npcBubbleStyle = { position: 'absolute', right: 'var(--space-sm, 10px)', top: 'var(--space-sm, 10px)', maxWidth: '64%', padding: 'var(--space-sm) var(--space-md)', display: 'flex', alignItems: 'center', background: 'var(--bg-card, #fff)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', zIndex: 4, cursor: 'pointer' };
+const npcBubbleWrapStyle = { position: 'absolute', right: 'var(--space-sm, 10px)', top: 'var(--space-sm, 10px)', maxWidth: '64%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-xs)', zIndex: 4 };
+const npcBubbleStyle = { position: 'relative', padding: 'var(--space-sm) var(--space-md)', display: 'flex', alignItems: 'center', background: 'var(--bg-card, #fff)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)' };
 const npcArrowStyle = { position: 'absolute', left: -8, top: 'var(--space-md, 16px)', width: 0, height: 0, borderTop: '7px solid transparent', borderBottom: '7px solid transparent', borderRight: '8px solid var(--bg-card, #fff)' };
+const npcAdBtnStyle = { padding: 'var(--space-xs) var(--space-md)', borderRadius: 'var(--radius-full)', border: 'none', background: 'var(--color-gold, #f5a623)', color: '#fff', fontWeight: 700, fontSize: 'var(--font-body)', fontFamily: 'inherit', boxShadow: 'var(--shadow-sm)', textAlign: 'right' };
 const npcSceneFrontStyle = { position: 'absolute', left: 0, right: 0, bottom: 0, width: '100%', height: '30%', objectFit: 'cover', objectPosition: 'bottom', zIndex: 3, pointerEvents: 'none' };
 const filterBarStyle = { flexShrink: 0, display: 'flex', alignItems: 'center', padding: 'var(--space-xs) var(--space-sm)', background: 'var(--bg-elevated, #fdf0d8)', borderBottom: '1px solid var(--border, rgba(0,0,0,0.09))' };
 const filterBtnStyle = { flexShrink: 0, borderRadius: 50, padding: 'var(--space-xs) var(--space-sm)', fontWeight: 700, fontSize: 'var(--font-caption)', cursor: 'pointer', transition: 'var(--t-fast)', fontFamily: 'inherit', whiteSpace: 'nowrap' };

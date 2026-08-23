@@ -8,7 +8,7 @@ import { Events } from '@/core/event_types.js';
 const SAVE_KEY = GameConfig?.System?.SaveKey ?? 'questory_save_v1';
 export const BASE_TASK_CATS = ['日常', '運動', '工作', '待辦', '願望'];
 export const LOCKED_TASK_CATS = ['日常', '運動']; // 日常=系統保留fallback；運動=綁定卡路里欄位，皆不可改名/刪除
-export const FALLBACK_TASK_CAT = '日常'; // 👈 補上這一行
+export const FALLBACK_TASK_CAT = '日常';
 const FREE_CUSTOM_CAT_LIMIT = 2;   // 免費版：可額外新增 2 個
 const PRO_CUSTOM_CAT_LIMIT = 10;  // PRO 版：可額外新增 10 個
 // ── 商店道具 ID 命名統一遷移表（一次性轉換用，詳見《Questory 商店道具 ID 命名規範》）──
@@ -125,6 +125,12 @@ export const useGameStore = create(
             logs: s.cal?.logs ?? [],
           };
 
+          // shopAd：商店 NPC 廣告入口的冷卻時間戳 + 當日已發放次數
+          const shopAd = {
+            lastWatchAt: s.shopAd?.lastWatchAt ?? null,
+            rewardsGivenToday: s.shopAd?.rewardsGivenToday ?? 0,
+          };
+
           // positions
           const positions = {
             ...(s.positions ?? {}),
@@ -136,15 +142,22 @@ export const useGameStore = create(
           //    只留 count 不動——避免道具改版後，玩家很早以前買的東西還停留在舊資料
           const remapShopId = (id) => SHOP_ID_MIGRATION[id] ?? id;
 
-          const bag = (s.bag ?? []).map(b => {
-            const newId = remapShopId(b.id);
-            const sysProto = (SystemShop ?? []).find(p => p.id === newId);
-            if (sysProto) return { ...sysProto, id: newId, count: b.count };
-            const userProto = (s.shop?.user ?? []).find(p => p.id === newId);
-            if (userProto) return { ...userProto, count: b.count };
-            // 找不到來源（商品已下架）：只換 id，其餘維持原本快照
-            return newId === b.id ? b : { ...b, id: newId };
-          });
+          const bag = (s.bag ?? [])
+            .map(b => {
+              const newId = remapShopId(b.id);
+              const sysProto = (SystemShop ?? []).find(p => p.id === newId);
+              if (sysProto) return { ...sysProto, id: newId, count: b.count };
+              const userProto = (s.shop?.user ?? []).find(p => p.id === newId);
+              if (userProto) return { ...userProto, count: b.count };
+              // 找不到來源（商品已下架）：如果快照本身還留著完整展示資料
+              // （例如孵化中的蛋，id 帶時間戳對不上原型，但本來就是從
+              // 完整的蛋快照展開出來的），只換 id、其餘保留；如果連 name
+              // 都沒有，代表是更早以前就已經殘缺的資料（例如扭蛋系統整個
+              // 拔掉後留下的舊快照），直接清掉，不要讓它一直卡在背包裡。
+              if (!b.name) return null;
+              return newId === b.id ? b : { ...b, id: newId };
+            })
+            .filter(Boolean);
 
           const sysShop = Object.fromEntries(
             Object.entries(s.sysShop ?? {}).map(([id, v]) => [remapShopId(id), v])
@@ -178,6 +191,7 @@ export const useGameStore = create(
             subscription,
             story,
             cal,
+            shopAd,
             lastLoginDate: s.lastLoginDate ?? new Date().toDateString(),
             totalLoginDays: s.totalLoginDays ?? 0,
             loginStreak: s.loginStreak ?? 0,
@@ -191,7 +205,7 @@ export const useGameStore = create(
             lastEnergyTick: s.lastEnergyTick ?? Date.now(),
             taskCats: s.taskCats ?? [...BASE_TASK_CATS],
             customTaskCatNames: s.customTaskCatNames ?? [],
-            rewardCoupons: s.rewardCoupons ?? 0,
+            
             bag,
             sysShop,
             stage,
@@ -295,17 +309,6 @@ export const useGameStore = create(
           } : {}),
         }));
         return { success: true };
-      },
-      addRewardCoupon(amount = 1) {
-        if (amount <= 0) return;
-        set(s => ({ rewardCoupons: (s.rewardCoupons || 0) + amount }));
-      },
-
-      spendRewardCoupon(amount = 1) {
-        const s = get();
-        if ((s.rewardCoupons || 0) < amount) return false;
-        set(s => ({ rewardCoupons: s.rewardCoupons - amount }));
-        return true;
       },
 
       // ─── 資源方法（未變動）───────────────────────────────

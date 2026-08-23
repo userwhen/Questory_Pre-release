@@ -42,6 +42,8 @@ export const Events = {
     REQUEST_UPLOAD_ITEM: 'shop:request_upload_item',   // payload: 商品表單資料
     REQUEST_DELETE_ITEM: 'shop:request_delete_item',   // payload: { id }
     REQUEST_GRANT_ITEM: 'shop:request_grant_item',     // payload: { id, qty } — 成就獎勵直接發放道具，不扣款
+    REQUEST_AD_REWARD: 'shop:request_ad_reward',         // payload: { id, requestId } — 廣告獎勵道具，需等回應
+    AD_REWARD_RESULT: 'shop:ad_reward_result',           // payload: { success, msg, requestId }
   },
   Stats: {
     UPDATED: 'stats:updated',
@@ -66,6 +68,9 @@ export const Events = {
     SAVE_SKILL_RESULT: 'stats:save_skill_result',         // payload: { success, msg?, requestId }
     // ── 模式 C：刪除不需要等回應，UI 靠 Events.Stats.UPDATED 自動重繪 ──
     REQUEST_DELETE_SKILL: 'stats:request_delete_skill',   // payload: { name }
+    // ── 技能大師成就領取後才真正歸檔（模式 C）；技能刪除通知 ach.js 清掉未領取的對應成就 ──
+    REQUEST_ARCHIVE_SKILL: 'stats:request_archive_skill', // payload: { skillName }
+    SKILL_DELETED: 'stats:skill_deleted',                 // payload: { name }
   },
   Story: {
     // ── 現有（保留）────────────────────────────────
@@ -130,13 +135,12 @@ export const Events = {
     COMPLETE_CONTAINER_RESULT: 'ach:complete_container_result',   // payload: { success, msg?, reward?, summary?, requestId }
 
     // ── 模式 C：不需要等回應，UI 靠上面的 UPDATED 重繪 ──
-    REQUEST_UPDATE_MILESTONE: 'ach:request_update_milestone', // payload: 里程碑表單資料
     REQUEST_DELETE_MILESTONE: 'ach:request_delete_milestone', // payload: { id }
     REQUEST_CREATE_CONTAINER: 'ach:request_create_container', // payload: { title, taskId } — 新增任務時勾選「建立新成就」
     REQUEST_ADD_MEMBER: 'ach:request_add_member',             // payload: { achievementId, taskId } — 新增任務時勾選「加入既有成就」
     REQUEST_REMOVE_MEMBER: 'ach:request_remove_member', // payload: { achievementId, taskId } — 編輯任務時解除成就歸屬用
     REQUEST_UPDATE_TEXT: 'ach:request_update_text',           // payload: { id, title, desc } — 系統可編輯成就（分類/技能）改文字用
-    REQUEST_UPDATE_CONTAINER: 'ach:request_update_container', // payload: { id, title, desc, rewardItemId, rewardCoupons }
+    REQUEST_UPDATE_CONTAINER: 'ach:request_update_container', // payload: { id, title, desc, rewardItemId }
   },
   Settings: {
     UPDATED: 'settings:updated',

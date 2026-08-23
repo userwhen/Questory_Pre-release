@@ -8,6 +8,7 @@ import { getShopItems as getShopItemsPure, getStackedBag as getStackedBagPure } 
 const STAMINA_ITEM_IDS = ['sys_misc_stamina_s', 'sys_misc_stamina_m', 'sys_misc_stamina_l'];
 export const ShopEngine = {
   systemPrototypes: [],
+  AD_REWARD_TABLE: [5, 3, 3, 2, 1], // 商店 NPC 廣告入口：當日第 1～5 次分別發放的鑽石量，第 5 次後不再發（看廣告本身不限次數）
 
   init: makeIdempotentInit(function () {
     this.systemPrototypes = SystemShop || [];
@@ -46,8 +47,12 @@ export const ShopEngine = {
     const unsubDailyReset = EventBus.on(Events.System.DAILY_RESET, () => {
       this.performDailyReset();
     });
+    const unsubAdReward = EventBus.on(Events.Shop.REQUEST_AD_REWARD, ({ requestId }) => {
+      const result = this.grantAdReward();
+      EventBus.emit(Events.Shop.AD_REWARD_RESULT, { ...result, requestId });
+    });
 
-    return [unsubBuy, unsubUse, unsubDiscard, unsubUpload, unsubDelete, unsubGrant, unsubDailyReset];
+    return [unsubBuy, unsubUse, unsubDiscard, unsubUpload, unsubDelete, unsubGrant, unsubDailyReset, unsubAdReward];
   }),
 
   performDailyReset() {
@@ -67,8 +72,30 @@ export const ShopEngine = {
           : item
         );
 
-      return { sysShop, shop: { ...s.shop, user: userShop } };
+      // 商店廣告入口：每日已發放次數歸零，冷卻時間戳不動（冷卻是連續 30 分鐘概念，不受跨日影響）
+      return { sysShop, shop: { ...s.shop, user: userShop }, shopAd: { ...s.shopAd, rewardsGivenToday: 0 } };
     });
+  },
+
+  // 商店 NPC 廣告入口：完整看完廣告後才會呼叫，查當日已發放次數對照 AD_REWARD_TABLE
+  // 算這次要不要發、發多少，同時更新冷卻時間戳。冷卻本身（能不能點）交給 UI 層算，
+  // 這裡只管「已經看完了，該不該發獎勵」。
+  grantAdReward() {
+    const s = getState();
+    const count = s.shopAd?.rewardsGivenToday ?? 0;
+    const granted = this.AD_REWARD_TABLE[count] ?? 0;
+
+    setState(store => ({
+      freeGem: (store.freeGem || 0) + granted,
+      shopAd: {
+        ...store.shopAd,
+        lastWatchAt: Date.now(),
+        rewardsGivenToday: count + 1,
+      },
+    }));
+
+    if (granted > 0) EventBus.emit(Events.Stats.UPDATED);
+    return { success: true, granted };
   },
 
   getShopItems(cat) {

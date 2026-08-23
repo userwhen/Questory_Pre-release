@@ -26,8 +26,12 @@ export const DefaultData = {
     story: { energy: 30, tags: [], vars: {}, flags: {}, learning: {}, chain: null, currentNode: null },
 
     avatar: {
-        unlocked: ['body_01', 'face_01', 'furn_mirror'],
-        wearing: { body: 'body_01', face: 'face_01' }
+        unlocked: ['body_01', 'face_01', 'furn_mirror', 'bg_01'], // 預設擁有
+        wearing: {
+            body: 'body_01',
+            face: 'face_01',
+            bg: 'bg_01',   // 一開始就穿著
+        },
     },
 
     shop: { user: [] },

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
+     "dev": "C:/Users/Grace/AppData/Local/Android/Sdk/platform-tools/adb.exe reverse tcp:5174 tcp:5174 && vite --host",
     "build": "vite build",
     "preview": "vite preview",
     "cap:add": "cap add android",

@@ -3,8 +3,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useGameStore } from '@/core/state.js';
 import { EventBus, EventHelper } from '@/core/events.js';
 import { Events } from '@/core/event_types.js';
-import { AvatarShop, ALL_ITEMS, checkAttrGate } from '@/avatar/data/avatar_config.js';
+import { AvatarShop, ALL_ITEMS, checkAttrGate, GACHA_ENABLED, AVATAR_FULL_WARDROBE_ENABLED } from '@/avatar/data/avatar_config.js';
 import CharacterSprite from '@/ui/CharacterSprite.jsx';
+import TabPill from '@/ui/TabPill.jsx';
 
 // ─── AvatarStage ──────────────────────────────────────────────────────────────
 // 層級：背景(1) → 陪伴者左後(2) → 角色置中(3) → 寵物右下(4+)
@@ -13,17 +14,18 @@ function AvatarStage({ wearing }) {
   const findItem = id => ALL_ITEMS.find(i => i.id === id);
   const w = wearing;
 
-  // 優先整片 bg；否則牆 70% + 地 30%
-  const fullBg = w.bg;
-  const wallBg = !fullBg ? (w.wall_bg || null) : null;
-  const floorBg = !fullBg ? (w.floor_bg || null) : null;
+  // 全景當底；牆／地可疊在上面（兩邊齊全時 engine 會清掉 bg）
+  const fullBg = w.bg || null;
+  const wallBg = w.wall_bg || null;
+  const floorBg = w.floor_bg || null;
+
   const fullBgSrc = fullBg ? (findItem(fullBg)?.imgId ?? fullBg) : null;
   const wallSrc = wallBg ? (findItem(wallBg)?.imgId ?? wallBg) : null;
   const floorSrc = floorBg ? (findItem(floorBg)?.imgId ?? floorBg) : null;
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', pointerEvents: 'none', overflow: 'hidden' }}>
-      {/* 背景鋪滿舞台 */}
+      {/* 1. 整片全景（底） */}
       {fullBgSrc && (
         <img
           src={`img/${fullBgSrc}.png`}
@@ -32,65 +34,74 @@ function AvatarStage({ wearing }) {
           alt=""
         />
       )}
-      {!fullBgSrc && wallSrc && (
+
+      {/* 2. 牆（可疊在全景上） */}
+      {wallSrc && (
         <img
           src={`img/${wallSrc}.png`}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '70%', width: '100%', objectFit: 'cover', opacity: 0.75, zIndex: 1 }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '70%', width: '100%', objectFit: 'cover', opacity: 0.75, zIndex: 2 }}
           onError={e => { e.target.style.opacity = '0'; }}
           alt=""
         />
       )}
-      {!fullBgSrc && floorSrc && (
+
+      {/* 3. 地（可疊在全景上） */}
+      {floorSrc && (
         <img
           src={`img/${floorSrc}.png`}
-          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '30%', width: '100%', objectFit: 'cover', opacity: 0.75, zIndex: 1 }}
+          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '30%', width: '100%', objectFit: 'cover', opacity: 0.75, zIndex: 2 }}
           onError={e => { e.target.style.opacity = '0'; }}
           alt=""
         />
       )}
 
-      {/* 陪伴者：偏左後方、放大、在角色圖層之後，不壓主角 */}
-      {w.companion && (
+      {/* 角色群組（陪伴＋角色＋寵物）：只有這組留呼吸空間縮小，背景維持滿版 */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 3, transform: 'scale(0.85)', transformOrigin: 'center' }}>
+        {/* 陪伴者：偏左後方、放大、在角色圖層之後，不壓主角 */}
+        {w.companion && (
+          <div style={{
+            position: 'absolute',
+            bottom: '8%',
+            left: '2%',
+            zIndex: 2,
+            height: 140,
+            maxWidth: '32%',
+            display: 'flex',
+            alignItems: 'flex-end',
+          }}>
+            <img
+              src={`img/${findItem(w.companion)?.imgId ?? w.companion}.png`}
+              style={{
+                height: '100%',
+                width: 'auto',
+                maxWidth: '100%',
+                objectFit: 'contain',
+                filter: 'drop-shadow(2px 4px 6px rgba(0,0,0,0.12))',
+              }}
+              onError={e => { e.target.style.opacity = '0'; }}
+              alt=""
+            />
+          </div>
+        )}
+
+        {/* 角色：置中，預留左右空間給陪伴／寵物 */}
         <div style={{
           position: 'absolute',
-          bottom: '8%',
-          left: '2%',
-          zIndex: 2,
-          height: 140,
-          maxWidth: '32%',
+          bottom: '4%',
+          left: '18%',
+          right: '22%',
+          height: '88%',
+          zIndex: 3,
           display: 'flex',
           alignItems: 'flex-end',
+          justifyContent: 'center',
         }}>
-          <img
-            src={`img/${findItem(w.companion)?.imgId ?? w.companion}.png`}
-            style={{
-              height: '100%',
-              width: 'auto',
-              maxWidth: '100%',
-              objectFit: 'contain',
-              filter: 'drop-shadow(2px 4px 6px rgba(0,0,0,0.12))',
-            }}
-            onError={e => { e.target.style.opacity = '0'; }}
-            alt=""
-          />
+          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+            <CharacterSprite wearing={w} />
+          </div>
         </div>
-      )}
 
-      {/* 角色：置中，預留左右空間給陪伴／寵物 */}
-      <div style={{
-        position: 'absolute',
-        bottom: '4%',
-        left: '18%',
-        right: '22%',
-        height: '88%',
-        zIndex: 3,
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'center',
-      }}>
-        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-          <CharacterSprite wearing={w} />
-        </div>
+        
       </div>
     </div>
   );
@@ -98,6 +109,7 @@ function AvatarStage({ wearing }) {
 
 // ─── WardrobeCard ─────────────────────────────────────────────────────────────
 function WardrobeCard({ item, isWearing, isUnlocked, attrs, onWear, onBuy }) {
+  const [imgFailed, setImgFailed] = useState(false);
   const shopConfig = AvatarShop.find(i => i.id === item.id);
   const canBuy = shopConfig && shopConfig.price !== undefined;
   const needsSet = (shopConfig?.requires?.length ?? 0) > 0;
@@ -121,16 +133,19 @@ function WardrobeCard({ item, isWearing, isUnlocked, attrs, onWear, onBuy }) {
       ...wardrobeCardStyle,
       borderColor: isWearing ? 'var(--color-gold,#f5a623)' : 'transparent',
       background: isWearing ? 'rgba(245,166,35,0.08)' : 'var(--bg-card,#fff)',
-      opacity: (!isUnlocked && attrLocked) ? 0.72 : 1,
+      opacity: (!isUnlocked && (attrLocked || needsSet)) ? 0.72 : 1,
     }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: '4px 4px 2px', minHeight: 0 }} onClick={handlePreview}>
         <div style={{ position: 'relative', width: '100%', height: 'var(--size-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
-          {item.layers ? item.layers.map((l, i) => (
-            <img key={i} src={`img/${l.img}.png`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 3 }} onError={e => { e.target.style.opacity = '0'; }} alt="" />
-          )) : (
-            <img src={`img/${imgId}.png`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 2 }} onError={e => { e.target.style.opacity = '0'; }} alt="" />
+          {imgFailed ? (
+            <span style={{ fontSize: 'var(--size-sm)' }}>{item.icon || '📦'}</span>
+          ) : item.layers ? (
+            item.layers.map((l, i) => (
+              <img key={i} src={`img/${l.img}.png`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 2 }} onError={() => setImgFailed(true)} alt="" />
+            ))
+          ) : (
+            <img src={`img/${imgId}.png`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 2 }} onError={() => setImgFailed(true)} alt="" />
           )}
-          <span style={{ fontSize: 'var(--size-sm)', opacity: 0.25, position: 'absolute', zIndex: 1 }}>{item.icon || '📦'}</span>
         </div>
         <div style={{ fontSize: 'clamp(0.6rem,2vw,0.7rem)', fontWeight: 700, color: 'var(--text,#2c1a0e)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
           {item.name}
@@ -140,7 +155,7 @@ function WardrobeCard({ item, isWearing, isUnlocked, attrs, onWear, onBuy }) {
       <div style={{ width: '100%', flexShrink: 0, marginTop: 'auto' }}>
         {isWearing ? (
           <button style={{ ...wardrobeBtnStyle, background: 'var(--color-correct,#227A59)', color: '#fff', border: 'none' }} onClick={() => onWear(item.id, item.type)}>
-            {item.type === 'body' || item.type === 'face' ? '已裝備' : '卸下'}
+            {item.type === 'body' || item.type === 'face' || (item.type === 'suit' && !AVATAR_FULL_WARDROBE_ENABLED) ? '已裝備' : '卸下'}
           </button>
         ) : isUnlocked ? (
           <button style={{ ...wardrobeBtnStyle, background: 'var(--color-correct,#227A59)', color: '#fff', border: 'none' }} onClick={() => onWear(item.id, item.type)}>
@@ -161,7 +176,7 @@ function WardrobeCard({ item, isWearing, isUnlocked, attrs, onWear, onBuy }) {
             {shopConfig.price > 0 ? `💎${shopConfig.price}` : '免費領取'}
           </button>
         ) : (
-          <button style={{ ...wardrobeBtnStyle, opacity: 0.55, cursor: 'not-allowed' }} disabled>🔒 尚未開放</button>
+          <button style={{ ...wardrobeBtnStyle, opacity: 0.55, cursor: 'not-allowed' }} disabled>🎡 扭蛋</button>
         )}
       </div>
     </div>
@@ -171,6 +186,7 @@ function WardrobeCard({ item, isWearing, isUnlocked, attrs, onWear, onBuy }) {
 // ─── AvatarPage ───────────────────────────────────────────────────────────────
 export default function AvatarPage({ onNavigate }) {
   const avatar = useGameStore(s => s.avatar) || { unlocked: [], wearing: {}, gender: 'm' };
+  
   const previewWearing = useGameStore(s => s.previewWearing) || null;
   const attrs = useGameStore(s => s.attrs) || {};
 
@@ -178,8 +194,22 @@ export default function AvatarPage({ onNavigate }) {
   const [tab, setTab] = useState('suit');
 
   useEffect(() => {
+    if (import.meta.env.DEV) {
+      window.cheatGacha = (gem = 50000, tickets = 50) => {
+        useGameStore.setState(s => {
+          const bag = [...(s.bag || [])];
+          const tIdx = bag.findIndex(i => i.id === 'sys_misc_gacha_ticket');
+          if (tIdx > -1) bag[tIdx] = { ...bag[tIdx], count: bag[tIdx].count + tickets };
+          else bag.push({ id: 'sys_misc_gacha_ticket', count: tickets });
+          return { freeGem: (s.freeGem || 0) + gem, bag };
+        });
+        console.log(`💎 作弊：+${gem} 鑽石, +${tickets} 券`);
+      };
+    }
+
     return () => {
       EventBus.emit(Events.Avatar.REQUEST_CLEAR_PREVIEW);
+      if (import.meta.env.DEV) delete window.cheatGacha;
     };
   }, []);
 
@@ -192,24 +222,23 @@ export default function AvatarPage({ onNavigate }) {
   const wearing = previewWearing ?? avatar.wearing ?? {};
   const unlockedSet = new Set(avatar.unlocked ?? []);
 
-  // 寵物／陪伴分頁初版先隱藏（見 MODE_TABS 少了 pet 這個 key、下面模式按鈕
-  // 也拿掉了 ['pet','🐾']）。avatar_config.js 裡的 pet_XX / comp_XX 商品資料
-  // 原封不動留著，之後要開回來只要把這裡的 pet 分頁跟按鈕加回去即可。
   const MODE_TABS = {
-    avatar: ['suit', 'top', 'bottom', 'hair', 'face', 'body', 'accessory'],
+    avatar: AVATAR_FULL_WARDROBE_ENABLED
+      ? ['suit', 'top', 'bottom', 'hair', 'face', 'body', 'accessory']
+      : ['suit'],
     // bg = 整片滿版背景；wall_bg / floor_bg = 房間牆地拆分
     decor: ['bg', 'wall_bg', 'floor_bg', 'furniture'],
   };
   const TAB_LABELS = {
     suit: '套裝', top: '上裝', bottom: '下裝', hair: '髮型',
     face: '臉部', body: '素體', accessory: '配件',
-    bg: '背景', furniture: '家具',
+    pet: '寵物', companion: '陪伴', bg: '背景', furniture: '家具',
     wall_bg: '牆面', floor_bg: '地面',
   };
 
   const tabItems = useMemo(() => {
     const seen = new Set();
-    return ALL_ITEMS.filter(item => {
+    const filtered = ALL_ITEMS.filter(item => {
       const typeMatch = tab === 'hair'
         ? ['hair_front', 'hair_back', 'hair_combo'].includes(item.type)
         : tab === 'suit'
@@ -219,9 +248,18 @@ export default function AvatarPage({ onNavigate }) {
       seen.add(item.id);
       return true;
     });
-  }, [tab]);
 
-  // 只認真實 avatar.wearing，不用 previewWearing
+    // 靠 requires 集齊解鎖、還沒集齊的排到最後（半透明顯示，不整格隱藏）
+    const unlocked = avatar.unlocked ?? [];
+    const ready = [];
+    const pending = [];
+    filtered.forEach(item => {
+      const needsSet = (item.requires?.length ?? 0) > 0 && !unlocked.includes(item.id);
+      (needsSet ? pending : ready).push(item);
+    });
+    return [...ready, ...pending];
+  }, [tab, avatar.unlocked]);
+
   const isItemWearing = item => (avatar.wearing ?? {})[item.type] === item.id;
 
   const handleWear = useCallback((id, type) => EventBus.emit(Events.Avatar.REQUEST_WEAR_ITEM, { id, type }), []);
@@ -246,6 +284,9 @@ export default function AvatarPage({ onNavigate }) {
     <div style={pageStyle}>
       <div style={stageStyle}>
         <div style={modeColStyle}>
+          {GACHA_ENABLED && (
+            <button style={modeBtnStyle} onClick={() => onNavigate('gacha')}>🎰</button>
+          )}
           {[['avatar', '👗'], ['decor', '🖼️']].map(([m, icon]) => (
             <button key={m}
               style={{ ...modeBtnStyle, borderColor: modeBtnActive(m) ? 'var(--color-gold,#f5a623)' : 'var(--border,rgba(0,0,0,0.09))', background: modeBtnActive(m) ? 'rgba(245,166,35,0.12)' : 'var(--bg-card,#fff)' }}
@@ -253,19 +294,14 @@ export default function AvatarPage({ onNavigate }) {
             >{icon}</button>
           ))}
         </div>
-        <div style={{ width: '100%', height: '100%', transform: 'scale(0.85)', transformOrigin: 'center' }}>
+        <div style={{ width: '100%', height: '100%' }}>
           <AvatarStage wearing={wearing} />
         </div>
       </div>
 
       <div style={wardrobeAreaStyle}>
         <div style={tabBarStyle}>
-          {MODE_TABS[mode].map(t => (
-            <button key={t}
-              style={{ ...tabBtnStyle, background: tab === t ? 'var(--color-correct,#227A59)' : 'transparent', color: tab === t ? '#fff' : 'var(--text-muted,#8c6e52)', border: tab === t ? 'none' : '1px solid var(--border,rgba(0,0,0,0.09))' }}
-              onClick={() => setTab(t)}
-            >{TAB_LABELS[t]}</button>
-          ))}
+          <TabPill items={MODE_TABS[mode].map(t => ({ value: t, label: TAB_LABELS[t] }))} value={tab} onChange={setTab} />
         </div>
         <div style={wardrobeListStyle}>
           {tabItems.length === 0 ? (
@@ -291,6 +327,8 @@ export default function AvatarPage({ onNavigate }) {
           <div style={{ height: 'var(--size-xs)' }} />
         </div>
       </div>
+
+      
     </div>
   );
 }
@@ -302,7 +340,7 @@ const modeColStyle = { position: 'absolute', top: 10, right: 14, display: 'flex'
 const modeBtnStyle = { width: 'var(--size-md)', height: 'var(--size-md)', borderRadius: '50%', border: '2px solid var(--border,rgba(0,0,0,0.09))', background: 'var(--bg-card,#fff)', fontSize: 'var(--font-title)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-sm)', transition: 'all var(--t-base)' };
 const wardrobeAreaStyle = { flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-card,#fff)', boxShadow: '0 -4px 15px rgba(0,0,0,0.07)', overflow: 'hidden', zIndex: 10 };
 const tabBarStyle = { flexShrink: 0, display: 'flex', gap: 'var(--space-xs)', padding: 'var(--space-xs) var(--space-sm)', background: 'var(--bg-panel,#f7e7ce)', borderBottom: '1px solid var(--border,rgba(0,0,0,0.09))', overflowX: 'auto', scrollbarWidth: 'none' };
-const tabBtnStyle = { flexShrink: 0, borderRadius: 50, padding: 'var(--space-xs) var(--space-sm)', fontWeight: 700, fontSize: 'var(--font-caption)', cursor: 'pointer', transition: 'var(--t-fast)', fontFamily: 'inherit' };
+
 const wardrobeListStyle = { flex: 1, overflowY: 'auto', padding: 'var(--space-xs)' };
 const wardrobeGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 'var(--space-xs)' };
 const wardrobeCardStyle = { borderRadius: 'var(--radius-md,12px)', border: '2px solid transparent', display: 'flex', flexDirection: 'column', padding: 'var(--space-xs)', aspectRatio: '1/1', boxShadow: 'var(--shadow-xs)', transition: 'all var(--t-base)', overflow: 'hidden', boxSizing: 'border-box' };

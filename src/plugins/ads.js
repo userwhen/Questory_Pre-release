@@ -9,12 +9,12 @@ export const Ads = {
   ADS_MODE: 'live', // 'mock' | 'live' —— 裝好廣告 SDK、填好正式版位 ID 後切成 'live'
 
   // 版位 ID 先放佔位字串，接 SDK（例如 AdMob）時換成正式的 Ad Unit ID。
-    PLACEMENTS: {
-    SHOP_BANNER:       'ca-app-pub-3940256099942544/6300978111',
-    SHOP_NPC_BUBBLE:   'placeholder_shop_npc_bubble',
-    REWARDED_STAMINA:  'ca-app-pub-3940256099942544/5224354917',
-    REWARDED_TIMER:    'ca-app-pub-3940256099942544/5224354917',
-    REWARDED_CHECKIN:  'ca-app-pub-3940256099942544/5224354917',
+  PLACEMENTS: {
+    SHOP_BANNER: 'ca-app-pub-3940256099942544/6300978111',
+    REWARDED_STAMINA: 'ca-app-pub-3940256099942544/5224354917',
+    REWARDED_TIMER: 'ca-app-pub-3940256099942544/5224354917',
+    REWARDED_CHECKIN: 'ca-app-pub-3940256099942544/5224354917',
+    REWARDED_SHOP_DIAMONDS: 'ca-app-pub-3940256099942544/5224354917', // 商店 NPC 廣告入口，先跟其他 REWARDED_* 共用同一組 demo ID
   },
 
   _initialized: false,
@@ -81,18 +81,30 @@ export const Ads = {
   },
 
   async _liveRewarded(placementId) {
+    console.log('[診斷] _liveRewarded 開始，placementId=', placementId);
     let earned = false;
-    const rewardedListener = await AdMob.addListener(RewardAdPluginEvents.Rewarded, () => {
-      earned = true; // 使用者真的看完、達到發獎門檻才會觸發，中途關掉不會觸發
-    });
+    let rewardedListener;
+    try {
+      rewardedListener = await AdMob.addListener(RewardAdPluginEvents.Rewarded, () => {
+        earned = true;
+        console.log('[診斷] Rewarded 事件觸發');
+      });
+      console.log('[診斷] addListener 完成');
+    } catch (e) {
+      console.error('[診斷] addListener 本身丟出例外：', e);
+      throw e;
+    }
 
     try {
       await AdMob.prepareRewardVideoAd({ adId: placementId });
+      console.log('[診斷] prepareRewardVideoAd 完成');
       await AdMob.showRewardVideoAd();
+      console.log('[診斷] showRewardVideoAd 完成（廣告視窗已關閉）');
     } catch (e) {
       console.warn('[Ads] Rewarded 廣告播放失敗:', e);
     } finally {
       await rewardedListener.remove();
+      console.log('[診斷] listener.remove 完成，earned=', earned);
     }
 
     return { completed: earned };

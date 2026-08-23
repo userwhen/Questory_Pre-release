@@ -20,10 +20,6 @@
 export const AvatarShop = [
   { id: 'body_01', name: '白皙素體', price: 0, type: 'body', icon: '🧍', layers: [ { img: 'body/body_01_body' }, { img: 'body/body_01_head' } ], imgId: 'body/body_01', rarity: 'R' },
   { id: 'body_02', name: '白肌素體', price: 50, type: 'body', icon: '🧍🏽', layers: [ { img: 'body/body_02_body' }, { img: 'body/body_02_head' } ], imgId: 'body/body_02', rarity: 'R' },
-  { id: 'body_03', name: '素體', price: 50, type: 'body', icon: '🧍🏽', layers: [ { img: 'body/body_03_body' }, { img: 'body/body_03_head' } ], imgId: 'body/body_03', rarity: 'R' },
-  { id: 'body_04', name: '素體', price: 50, type: 'body', icon: '🧍🏽', layers: [ { img: 'body/body_04_body' }, { img: 'body/body_04_head' } ], imgId: 'body/body_04', rarity: 'R' },
-  { id: 'body_05', name: '素體', price: 50, type: 'body', icon: '🧍🏽', layers: [ { img: 'body/body_05_body' }, { img: 'body/body_05_head' } ], imgId: 'body/body_05', rarity: 'R' },
-  { id: 'body_06', name: '素體', price: 50, type: 'body', icon: '🧍🏽', layers: [ { img: 'body/body_06_body' }, { img: 'body/body_06_head' } ], imgId: 'body/body_06', rarity: 'R' },
   { id: 'face_01', name: '微笑表情', price: 0, type: 'face', icon: '😊', imgId: 'face/face_01', rarity: 'R' },
   { id: 'face_02', name: '俏皮眨眼', price: 50, type: 'face', icon: '😉', imgId: 'face/face_02', rarity: 'R' },
   { id: 'face_03', name: '俏皮眨眼', price: 50, type: 'face', icon: '😉', imgId: 'face/face_03', rarity: 'R' },
@@ -114,6 +110,38 @@ export const AvatarShop = [
   { id: 'furn_bed', name: '舒適小床', price: 300, type: 'furniture', size: 'L', icon: '🛌', imgId: 'furniture/furn_bed', rarity: 'SR' }
 ];
 
+// 扭蛋池：只抽 avatar 外觀商品（有價格、非集齊解鎖）
+// 不含 data.js 商店消耗品；免費起始物與 requires 集齊物不進池
+export const GachaPool = [
+  // 只抽 avatar 外觀：有價格、非集齊解鎖；不含 data.js 消耗品與舊扭蛋專屬
+  ...AvatarShop.filter(i => (i.price ?? 0) > 0 && !(i.requires?.length)),
+];
+
+// 初版功能開關：扭蛋機在初版先關閉（GachaPool 內容跟 AvatarShop 完全重疊，
+// 關閉不會少任何內容，等品項/道具池決定好之後再打開）。
+// 只有這一個開關要改，AvatarPage.jsx 的入口按鈕跟 GameLayout.jsx 的路由都吃這裡。
+// 初版功能開關：扭蛋機在初版先關閉（GachaPool 內容跟 AvatarShop 完全重疊，
+// 關閉不會少任何內容，等品項/道具池決定好之後再打開）。
+// 只有這一個開關要改，AvatarPage.jsx 的入口按鈕跟 GameLayout.jsx 的路由都吃這裡。
+export const GACHA_ENABLED = false;
+
+// 出發版（上線精簡）開關：關閉時 AvatarPage 只顯示「套裝」分類，其餘欄位
+// （top/bottom/hair/face/body/accessory）全部隱藏，素體永遠綁定套裝，
+// 不會出現「沒穿套裝」的裸體狀態；開啟時是完整換裝系統。
+// 只有這一個開關要改，AvatarPage.jsx 的 MODE_TABS／WardrobeCard 按鈕文字、
+// engines/avatar.js 的預設穿著與卸下套裝邏輯都吃這裡。
+export const AVATAR_FULL_WARDROBE_ENABLED = false;
+
+export const GachaConfig = {
+  singleCost:  50,                        // 單抽鑽石費用
+  tenCost:     Math.floor(50 * 10 * 0.9), // 十連 9 折
+  pityLimit:   50,                        // 保底抽數
+  rates: {
+    SSR: 0.03,
+    SR:  0.12,
+    R:   0.85,
+  },
+};
 // 角色立繪查找用
 export const ALL_ITEMS = [...AvatarShop];
 
@@ -124,9 +152,10 @@ export function findItemById(itemId) {
 }
 
 /**
- * 道具 id 或已含子路徑的 img key → <img src>
- * - bg_01 → img/bg/bg_01.png
- * - body/body_01_body → img/body/body_01_body.png
+ * 將道具 id 或已含子路徑的 img key 轉成可給 <img src> 的路徑。
+ * - 傳道具 id（如 bg_01）→ 查 config 的 imgId（如 bg/bg_01）→ img/bg/bg_01.png
+ * - 傳已是路徑的 key（如 body/body_01_body）→ img/body/body_01_body.png
+ * - 查無道具時 fallback：把字串當相對路徑用（相容舊資料）
  */
 export function itemImgSrc(itemIdOrImgKey) {
   if (!itemIdOrImgKey) return null;

@@ -28,12 +28,12 @@ export const TaskEngine = {
     const unsubDelete = EventBus.on(Events.Task.REQUEST_DELETE, ({ id }) => this.deleteTask(id));
     const unsubBatchDelete = EventBus.on(Events.Task.REQUEST_BATCH_DELETE, ({ ids }) => { (ids || []).forEach(id => this.deleteTask(id)); });
 
-    const unsubRewardResult = EventBus.on(Events.Reward.ROLL_RESULT, ({ requestId, gold, exp, coupon, freeGem }) => {
+    const unsubRewardResult = EventBus.on(Events.Reward.ROLL_RESULT, ({ requestId, gold, exp, bonusItem, freeGem }) => {
       const pending = _pendingRewardRequests[requestId];
       if (!pending) return; // 不是本模組發出的請求，或已經處理過
       delete _pendingRewardRequests[requestId];
       this._finalizeCompletion(pending.taskId, pending.impact, pending.combo, {
-        gold, exp, coupon, freeGem: freeGem || 0,
+        gold, exp, bonusItem, freeGem: freeGem || 0,
       });
     });
 
@@ -193,7 +193,10 @@ export const TaskEngine = {
     const task = (s.tasks || []).find(t => t.id === id);
 
     if (task?.done) {
-      const actualReward = task.lastReward || { gold: 0, exp: 0, coupon: false, freeGem: 0 };
+      // 額外道具（小錢袋等）比照蛋殼碎片掉落的既有慣例：一次性獎勵，撤銷/刪除
+      // 不會收回玩家背包裡的道具（也收不回——玩家可能已經用掉了），只回收
+      // 金幣/經驗/鑽石這些直接寫在 state 上、可以乾淨回滾的數值。
+      const actualReward = task.lastReward || { gold: 0, exp: 0, freeGem: 0 };
       const isStrict = s.unlocks?.feature_strict && s.settings?.strictMode;
       const gemAmt = actualReward.freeGem || 0;
 
@@ -201,9 +204,6 @@ export const TaskEngine = {
         gold: isStrict
           ? (store.gold || 0) - actualReward.gold
           : Math.max(0, (store.gold || 0) - actualReward.gold),
-        rewardCoupons: actualReward.coupon
-          ? Math.max(0, (store.rewardCoupons || 0) - 1)
-          : store.rewardCoupons,
         freeGem: isStrict
           ? (store.freeGem || 0) - gemAmt
           : Math.max(0, (store.freeGem || 0) - gemAmt),
@@ -279,7 +279,7 @@ export const TaskEngine = {
 
     // 撤銷已完成：回收先前實際發放的獎勵（含金幣券、免費鑽石），這條路徑不含隨機性，維持同步
     // 經驗／技能／父屬性一律完整還原（方案甲）；金幣／鑽石是否可扣成負仍依嚴格模式
-    const actualReward = task.lastReward || { gold: 0, exp: 0, coupon: false, freeGem: 0 };
+    const actualReward = task.lastReward || { gold: 0, exp: 0, freeGem: 0 };
     const isStrict = s.unlocks?.feature_strict && s.settings?.strictMode;
     const gemAmt = actualReward.freeGem || 0;
 
@@ -294,9 +294,6 @@ export const TaskEngine = {
       const gold = isStrict
         ? (store.gold || 0) - actualReward.gold
         : Math.max(0, (store.gold || 0) - actualReward.gold);
-      const rewardCoupons = actualReward.coupon
-        ? Math.max(0, (store.rewardCoupons || 0) - 1)
-        : store.rewardCoupons;
       const freeGem = isStrict
         ? (store.freeGem || 0) - gemAmt
         : Math.max(0, (store.freeGem || 0) - gemAmt);
@@ -310,7 +307,7 @@ export const TaskEngine = {
           ].slice(0, 30),
         }
         : store.cal;
-      return { tasks, history, gold, rewardCoupons, freeGem, cal };
+      return { tasks, history, gold, freeGem, cal };
     });
 
     EventBus.emit(Events.Stats.REDUCE_PLAYER_EXP, { amount: actualReward.exp, isStrict });
@@ -346,7 +343,6 @@ export const TaskEngine = {
       });
       const history = [...(store.history || []), historyEntry].slice(-500);
       const gold = (store.gold || 0) + rewards.gold;
-      const rewardCoupons = rewards.coupon ? (store.rewardCoupons || 0) + 1 : store.rewardCoupons;
       const freeGem = (store.freeGem || 0) + gemGain;
       const isCalActive = store.unlocks?.feature_cal || store.settings?.calMode;
       const cal = isCalActive && task.calories > 0
@@ -358,7 +354,7 @@ export const TaskEngine = {
           ].slice(0, 30),
         }
         : store.cal;
-      return { tasks, history, gold, rewardCoupons, freeGem, cal };
+      return { tasks, history, gold, freeGem, cal };
     });
 
     EventBus.emit(Events.Stats.ADD_PLAYER_EXP, { amount: rewards.exp });
@@ -369,11 +365,18 @@ export const TaskEngine = {
       });
     }
 
+    // 原本骰中「金幣券」只是幫一個抽象計數器 +1，現在骰中直接授予一個真正的
+    // 背包道具（小錢袋，玩家自己使用後才變成 250 金幣）。跟碎片掉落
+    // （_rollEggShardDrop）同一種「一次性額外獎勵」定位，撤銷/刪除任務不會收回。
+    if (rewards.bonusItem) {
+      EventBus.emit(Events.Shop.REQUEST_GRANT_ITEM, { id: 'sys_cash_pouch', qty: 1 });
+    }
+
     const comboText = combo >= 2 ? ` 🔥 COMBO x${combo}!` : '';
     const enchantText = task.enchant?.boundAt ? ' ✦ 祝福加乘 x1.5' : '';
-    const couponText = rewards.coupon ? ' 🎫 獲得金幣券！' : '';
+    const bonusText = rewards.bonusItem ? ' 💰 額外獲得小錢袋！' : '';
     const gemText = gemGain > 0 ? ` 💎+${gemGain}` : '';
-    EventBus.emit(Events.System.TOAST, `完成！+${rewards.gold}💰 +${rewards.exp}✨${gemText}${comboText}${enchantText}${couponText}`);
+    EventBus.emit(Events.System.TOAST, `完成！+${rewards.gold}💰 +${rewards.exp}✨${gemText}${comboText}${enchantText}${bonusText}`);
     EventBus.emit(Events.Task.COMPLETED, { task, impact, gained: rewards, combo });
     this._rollEggShardDrop();
   },
